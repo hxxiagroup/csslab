@@ -12,3 +12,5 @@ A platform for method share and cooperation.
 ## One more Nature\Sicence
 
 Contributing makes team growing!
+
+Copyright 2017 Complex Society System Group
