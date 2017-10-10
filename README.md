@@ -1,7 +1,14 @@
 # csslab
-A package for data processing and complex network analysis of complex society system group in DUT.
+
+A platform for method share and cooperation.
+
+- Data analysis.
+- Visualization.
+- Simulation
+- Complex Network analysis.
+- Examples for software, application.
 
 ## One more comtribution!
 ## One more Nature\Sicence
 
-Please comtribute and modfiy method for our group!
+Please comtribute for our group! Comtributing makes team growing.
