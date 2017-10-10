@@ -1,3 +1,4 @@
+#-*- coding:utf-8 -*-
 
 '''
 简介：
@@ -10,6 +11,10 @@
     edgedata:
         DataFrame;
         网络中边的信息，包含[Source,Target,Weight]信息,也可以是没有权重的
+
+    cluster_result
+        DataFrame;
+        社区划分的结果，形式为['id','modularity_class'],参考gephi导出的结果
 
 备注：
     2017.9.27.
@@ -28,6 +33,7 @@ import numpy as np
 import graphistry
 import igraph
 import networkx as nx
+
 
 class NetworkUnity():
     def __init__(self):
