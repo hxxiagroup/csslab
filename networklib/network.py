@@ -284,10 +284,10 @@ class NetworkUnity():
         return nodedata
 
     @staticmethod
-    def modularity(cluster_rescult,edgedata=None,graph=None,
+    def modularity(cluster_result,edgedata=None,graph=None,
                        directed=True, edge_weight='Weight'):
         '''
-        :param cluster_rescult: 聚类结果，参考gephi输出的表，[Id,modulraity_class]
+        :param cluster_result: 聚类结果，参考gephi输出的表，[Id,modulraity_class]
         :param edgedata: 边数据，与graph给定其中一个
         :param graph: networkx中的Graph/DiGraph
         :param directed: 是否为有向图
@@ -308,7 +308,7 @@ class NetworkUnity():
 
         ig = gr.pandas2igraph(edgedata,directed=directed)
         nodes = pd.DataFrame(list(ig.vs['Id']), columns=['Id'])
-        community_data = pd.merge(nodes, cluster_rescult, left_on='Id', right_on='Id', how='left')
+        community_data = pd.merge(nodes, cluster_result, left_on='Id', right_on='Id', how='left')
 
         if edge_weight is None:
             Q = ig.modularity(list(community_data['modularity_class']),weights=None)
