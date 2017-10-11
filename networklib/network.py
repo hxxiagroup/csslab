@@ -14,7 +14,8 @@
 
     cluster_result
         DataFrame;
-        社区划分的结果，形式为['id','modularity_class'],参考gephi导出的结果
+        社区划分的结果，形式为['Id','modularity_class']
+        gephi导出的结果为['id','modularity_class']，注意
 
 备注：
     2017.9.27.
@@ -86,7 +87,7 @@ class NetworkUnity():
         target = set(edgedata['Target'])
         nodes = list(source.union(target))
         if return_df:
-            nodes = pd.DataFrame(nodes,columns=['ID'])
+            nodes = pd.DataFrame(nodes,columns=['Id'])
         return nodes
 
     @staticmethod
@@ -191,13 +192,13 @@ class NetworkUnity():
         node_degree = graph.degree()
         nodes_all = list(graph.nodes())
         print('Node num: ',graph.number_of_nodes())
-        data = pd.DataFrame(list(node_degree),columns=['ID','Degree'])
+        data = pd.DataFrame(list(node_degree),columns=['Id','Degree'])
 
         if lower is not None:
             data = data[data['Degree'] >= lower]
         if upper is not None:
             data = data[data['Degree'] <= upper]
-        nodes_saved = list(data['ID'])
+        nodes_saved = list(data['Id'])
         nodes_drop = set(nodes_all).difference(nodes_saved)
         graph.remove_nodes_from(nodes_drop)
         print('Node num: ',graph.number_of_nodes())
@@ -208,14 +209,14 @@ class NetworkUnity():
         '''
         采用pygraphistry 来绘制网络图，节点颜色目前还不能超过12种
         :param graph: networkx.Graph/DiGraph
-        :param nodes: DataFrame,如果需要按社区颜色绘制，请传入带有社区信息的节点表, ['ID','modulraity_class']
+        :param nodes: DataFrame,如果需要按社区颜色绘制，请传入带有社区信息的节点表, ['Id','modulraity_class']
         :return: None
         '''
         graphistry.register(key='contact pygraphistry for api key')
 
         ploter = graphistry.bind(source='Source', destination='Target').graph(graph)
         if nodes is not None:
-            ploter = ploter.bind(node='ID', point_color='modularity_class').nodes(nodes)
+            ploter = ploter.bind(node='Id', point_color='modularity_class').nodes(nodes)
         ploter.plot()
         return None
 
@@ -235,7 +236,7 @@ class NetworkUnity():
             graph = NetworkUnity.get_graph_from_edgedata(edgedata,
                                                          directed=directed,connected_component=True)
 
-        gr = graphistry.bind(source='Source', destination='Target', node='ID', edge_weight='Weight').graph(graph)
+        gr = graphistry.bind(source='Source', destination='Target', node='Id', edge_weight='Weight').graph(graph)
         edgedata = NetworkUnity.networkx2pandas(graph)
         ig = gr.pandas2igraph(edgedata, directed=directed)
 
@@ -243,7 +244,7 @@ class NetworkUnity():
         #如果使用边的数据edgedata
         # gr = graphistry.bind(source='Source',destination='Target',edge_weight='Weight').edges(edgedata)
         # nodes = NetworkUnity.get_nodes_from_edgedata(edgedata)
-        # gr = gr.bind(node='ID').nodes(nodes)
+        # gr = gr.bind(node='Id').nodes(nodes)
         # ig = gr.pandas2igraph(edgedata,directed=directed)
         # --------------------------------------------------------
 
@@ -286,7 +287,7 @@ class NetworkUnity():
     def modularity(cluster_rescult,edgedata=None,graph=None,
                        directed=True, edge_weight='Weight'):
         '''
-        :param cluster_rescult: 聚类结果，参考gephi输出的表，[id,modulraity_class]
+        :param cluster_rescult: 聚类结果，参考gephi输出的表，[Id,modulraity_class]
         :param edgedata: 边数据，与graph给定其中一个
         :param graph: networkx中的Graph/DiGraph
         :param directed: 是否为有向图
@@ -303,11 +304,11 @@ class NetworkUnity():
             edgedata = NetworkUnity.networkx2pandas(graph)
 
         gr = graphistry.bind(source='Source', destination='Target',
-                             node='ID',edge_weight=edge_weight)
+                             node='Id',edge_weight=edge_weight)
 
         ig = gr.pandas2igraph(edgedata,directed=directed)
-        nodes = pd.DataFrame(list(ig.vs['ID']), columns=['ID'])
-        community_data = pd.merge(nodes, cluster_rescult, left_on='ID', right_on='id', how='left')
+        nodes = pd.DataFrame(list(ig.vs['Id']), columns=['Id'])
+        community_data = pd.merge(nodes, cluster_rescult, left_on='Id', right_on='Id', how='left')
 
         if edge_weight is None:
             Q = ig.modularity(list(community_data['modularity_class']),weights=None)
