@@ -1,13 +1,23 @@
 #-*- coding:utf-8 -*-
 
 '''
-简介：
-    用于对网络的分析，创建网络，计算网络特征等
-        --利用get_edgedata_from_odrecord, get_graph_from_edgedata, get_graph_info等方法，
-        直接从trip记录中计算网络图的特征
-        --主函数对odrecord写好循环，便可以计算构建的对各网络图的特征
-主要数据：
 
+目的：
+    用于对复杂网络相关的分析，创建网络，计算网络特征等
+    结合了networkx, igraph, pygrahistry的接口
+
+方法：
+    * 从边数据生成网络 - get_graph_from_edgedata
+    * 从边数据获取节点 - get_nodes_from_edgedata
+    * 将有向边转化为无向边 - as_undirected_edgedata
+    * 计算网络的特征 - get_graph_info
+    * 根据度来过滤网络 - degree_filter
+    * 计算模块度 - modularity
+    * 社区发现 - community_detect
+    * 绘制网络 - draw_graph
+
+
+主要数据：
     edgedata:
         DataFrame;
         网络中边的信息，包含[Source,Target,Weight]信息,也可以是没有权重的
@@ -16,6 +26,7 @@
         DataFrame;
         社区划分的结果，形式为['Id','modularity_class']
         gephi导出的结果为['id','modularity_class']，注意
+
 
 备注：
     2017.9.27.

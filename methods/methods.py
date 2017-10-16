@@ -1,11 +1,25 @@
 # -*- coding:utf-8 -*-
 '''
 
-Author: Stephen Lee
-Date: 2017.9.21
+目的：提供一些文件操作 和 数据处理的方法
 
-Provide some methods for network analysis or data processing
+方法一览：
+    功能 - 方法
+
+    * 读取大的数据表(csv) - read_csv
+    * 获取目录下所有某类型的文件名 - get_filename
+    * 读取目录下所有某类型的数据（csv,xlsx） - connect_file
+    * 数据表随机长度的抽样 - random_dataframe_sample
+    * 数据表根据字段过滤 - dataframe_filter
+        - 还需要修改
+    * 数据表根据时间戳过滤 - dataframe_slice_by_timestamp
+    * 计算概率密度分布 - distribution
+    * 计算累计概率密度分布 - distribution_cp
+    * 数据归一化到某个区间 - normlize
+
+
 '''
+
 import os
 import random
 from matplotlib import cm
@@ -13,7 +27,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 
-# algrithoms
+
 def read_csv(readpath):
     '''
     分块读取大的csv
@@ -74,7 +88,6 @@ def connect_file(dir, connect_nums=None, filetype='.csv',header = 0):
         return None
     return pd.concat(all_data,ignore_index=True)
 
-
 def random_dataframe_sample(df, num_sample):
     '''
     :param df: DataFrame，数据表
@@ -126,9 +139,10 @@ def dataframe_filter(data, attr, lower_limit = 'unlimited', upper_limit = 'unlim
 
 def dataframe_slice_by_timestamp(df,filter_dict):
     '''
-    :param df: data of dataframe
+    根据时间戳截取DataFrame数据表
+    :param df: DataFrame
     :param filter_dict: dict, e.g. {'Timestamp':['2008-10-1 10;00:00','2008-10-1 12:00:00'],}
-    :return: dataframe slice of filter
+    :return: DataFrame slice
     '''
     ind_all = []
     for attr,attr_vlaue in filter_dict.items():
@@ -150,7 +164,7 @@ def dataframe_slice_by_timestamp(df,filter_dict):
 def distribution(sd):
     '''
     计算数据的概率密度分布
-    :param sd: list/pandas.Series.
+    :param sd: list 或者 pandas.Series.
     :return: pandas.Series
     '''
     if isinstance(sd,pd.Series):
@@ -161,3 +175,33 @@ def distribution(sd):
     sd_fre = sd_count/sd_count.sum()
     return sd_fre
 
+def distribution_cp(sd):
+    '''
+    :purpose: calculate the cumulative probability distribution of a group data.
+    :param sd: list of pandas's Series.
+    :return: pandas's Series
+    '''
+    sd = pd.Series(sd)
+    sd_count = sd.value_counts().sort_index()
+    sd_fre = sd_count/sd_count.sum()
+    origin_index = sd_fre.index.values
+    sd_fre.index = range(len(sd_fre))
+    sd_cp = sd_fre.copy()
+    #分布函数，X<x
+    for i in range(len(sd_fre)):
+        sd_cp[i] = sum(sd_fre[:i])
+    sd_cp.index = origin_index
+    return sd_cp
+
+def normlize(data,lower=0,upper=1):
+    '''
+    将数据规范化到某个区间
+    :param data: 可以是list，array, ndarray等
+    :param lower: 规范化的下界
+    :param upper: 规范化的上界
+    :return: 规范化的数据
+    '''
+    xmax = np.max(data)
+    xmin = np.min(data)
+    data_new = (upper - lower) * (data - xmin) / (xmax - xmin) + lower
+    return data_new
