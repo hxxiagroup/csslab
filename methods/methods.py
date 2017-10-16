@@ -4,19 +4,19 @@
 目的：提供一些文件操作 和 数据处理的方法
 
 方法一览：
-    功能 - 方法
-
+    ----------功能 ------------ 方法 ---------------
     * 读取大的数据表(csv) - read_csv
     * 获取目录下所有某类型的文件名 - get_filename
     * 读取目录下所有某类型的数据（csv,xlsx） - connect_file
     * 数据表随机长度的抽样 - random_dataframe_sample
     * 数据表根据字段过滤 - dataframe_filter
-        - 还需要修改
     * 数据表根据时间戳过滤 - dataframe_slice_by_timestamp
     * 计算概率密度分布 - distribution
     * 计算累计概率密度分布 - distribution_cp
     * 数据归一化到某个区间 - normlize
 
+备注：
+    * 2017.10.16 - dataframe_filter方法还需要修改
 
 '''
 
