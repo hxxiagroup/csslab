@@ -22,8 +22,6 @@
 
 import os
 import random
-from matplotlib import cm
-import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 
@@ -102,39 +100,26 @@ def random_dataframe_sample(df, num_sample):
         df_sample = df
     return df_sample
 
-def dataframe_filter(data, attr, lower_limit = 'unlimited', upper_limit = 'unlimited'):
+def dataframe_filter(data, attr, lower = None, upper = None):
     '''
     :param data:  pandas.Dataframe obeject.
     :param attr:  the attribution that you wanna choose for filt
-    :param lower_limit: the lower limit of data
-    :param upper_limit: the upper limit of data
+    :param lower: the lower limit of data
+    :param upper: the upper limit of data
     :return: pandas.Dataframe after filt
     '''
     origin_length = len(data)
-    #----------------------------------
-    if upper_limit == 'unlimited':
-        pass
-    elif isinstance(eval(upper_limit),float) or isinstance(eval(upper_limit),int):
-        data = data[data[attr] <= eval(upper_limit)]
-    else:
-        print('- - Mistake: upper_limit should be a string of digit')
-        return None
-    #-----------------------------------
-    if lower_limit =='unlimited':
-        pass
-    elif isinstance(eval(lower_limit),float) or isinstance(eval(lower_limit),int):
-        data = data[data[attr] >= eval(lower_limit)]
-    else:
-        print('- - Mistake: lower_limit should be a string of digit')
-        return None
+    if lower is not None:
+        data = data[data[attr] >= lower]
+    if upper is not None :
+        data = data[data[attr] <= upper]
 
     filt_length = len(data)
     left_rate = round(filt_length/origin_length,3)
 
-    print('- - Filter:  %s  --  %s'%(lower_limit,upper_limit))
+    print('- - Filter: ',lower, ' ---- ', upper)
     print('- - orgin data: %d  - - after filtering: %d  - - %.3f left'
               %(origin_length,filt_length,left_rate))
-
     return data
 
 def dataframe_slice_by_timestamp(df,filter_dict):
