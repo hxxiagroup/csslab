@@ -174,7 +174,7 @@ class NetworkUnity():
             node_degree_centrality = nx.degree_centrality(graph)
             ave_degree_centrality = _average(node_degree_centrality)
             # 特征向量中心度
-            node_eigenvector_centrality = nx.eigenvector_centrality(graph)
+            node_eigenvector_centrality = nx.eigenvector_centrality_numpy(graph)
             ave_eigenvector_centrality = _average(node_eigenvector_centrality)
             #介数中心度
             node_betweenness = nx.betweenness_centrality(graph)
@@ -209,13 +209,13 @@ class NetworkUnity():
         features['Degree'] = nx.degree(graph)
         features['DegreeCentrality'] = nx.degree_centrality(graph)
         features['BetweennessCentrality'] = nx.betweenness_centrality(graph)
-        features['EigenvectorCentrality'] = nx.eigenvector_centrality(graph)
+        features['EigenvectorCentrality'] = nx.eigenvector_centrality_numpy(graph)
         features['ClosenessCentrality'] = nx.closeness_centrality(graph)
 
         if weight is not None:
             features['WeightedDegree'] = nx.degree(graph,weight=weight)
             features['WeightedBetweennessCentrality'] = nx.betweenness_centrality(graph,weight=weight)
-            features['WeightedEigenvectorCentrality'] = nx.eigenvector_centrality(graph,weight=weight)
+            features['WeightedEigenvectorCentrality'] = nx.eigenvector_centrality_numpy(graph,weight=weight)
 
         if graph.is_directed():
             features['InDegree'] = graph.in_degree()
@@ -230,8 +230,6 @@ class NetworkUnity():
 
         return node_features
 
-
-
     @staticmethod
     def degree_filter(graph,lower=None,upper=None):
         '''
@@ -243,16 +241,19 @@ class NetworkUnity():
         node_degree = graph.degree()
         nodes_all = list(graph.nodes())
         print('Node num: ',graph.number_of_nodes())
-        data = pd.DataFrame(list(node_degree),columns=['Id','Degree'])
+
+        data = pd.DataFrame(list(node_degree.items()),columns=['Id','Degree'])
 
         if lower is not None:
             data = data[data['Degree'] >= lower]
         if upper is not None:
             data = data[data['Degree'] <= upper]
+
         nodes_saved = list(data['Id'])
         nodes_drop = set(nodes_all).difference(nodes_saved)
         graph.remove_nodes_from(nodes_drop)
         print('Node num: ',graph.number_of_nodes())
+
         return graph
 
     @staticmethod
@@ -304,6 +305,7 @@ class NetworkUnity():
         参考http://pythonhosted.org/python-igraph/igraph.Graph-class.html
         希望以后可以对每一个算法添加一些简单的介绍
         '''
+
         method_dict = {
             0:'''ig.community_fastgreedy(weights='%s')'''%str(use_weight),
             1:'''ig.community_infomap(edge_weights='%s',trials=10)'''%str(use_weight),
@@ -321,17 +323,20 @@ class NetworkUnity():
         if use_weight is None:
             #如果为None,需要把公式里面的冒号去掉,注意如果有多个None,这个方法需要重新写
             detect_method= detect_method.replace('\'','')
+
+        # -------------开始实施社区发现算法-----------
         print('社区发现方法： ',detect_method)
-        #开始实施社区发现算法
         res_community = eval(detect_method)
         #将社区信息保存到节点信息中
         ig.vs['modulraity_class'] = res_community.membership
         #将节点信息转化为Dataframe表
         edgedata_,nodedata = gr.igraph2pandas(ig)
         modularity = res_community.modularity
+
         print(res_community.summary())
         print('community size:\n', res_community.sizes())
         print('modularity:\n', modularity)
+
         return nodedata
 
     @staticmethod
@@ -368,52 +373,56 @@ class NetworkUnity():
         return Q
 
 
-#------------------examples
-def main_filter():
-    DataDir = r'G:\data\transport\tokyo\Tokyo_2008_Original\Processed\grid\grid7000'
-    edgepath = DataDir + '\\edgedata.csv'
-    edgedata = pd.read_csv(edgepath)
-    graph = NetworkUnity.get_graph_from_edgedata(edgedata, connected_component=True)
+# ------------------- examples --------------------------
+def main_example():
+    # 边数据 - Source - Target - Weight
+    edges = [(0,1,5),
+             (1,2,6),
+             (2,1,3),
+             (0,2,4),
+             (0,4,1),
+             (4,5,1),
+             (5,4,5)]
 
-    NetworkUnity.degree_filter(graph)
+    cluster_result = pd.DataFrame({'Id':[0,1,2,4,5],'modularity_class':[0,0,0,1,1]})
 
-def main_function():
-    DataDir = r'G:\data\transport\tokyo\Tokyo_2008_Original\Processed\grid\grid7000'
-    edgepath = DataDir + '\\edgedata.csv'
-    edgedata = pd.read_csv(edgepath)
-    graph = NetworkUnity.get_graph_from_edgedata(edgedata,connected_component=True)
-    sv_info = DataDir + 'graph_info.csv'
-    infos = NetworkUnity.get_graph_info(graph,centrality=True,save_path=sv_info)
+    edgedata = pd.DataFrame(edges,columns=['Source','Target','Weight'])
+    print('------------Edgedata------------------')
+    print(edgedata)
 
-    # NetworkUnity.draw_graph(NetworkUnity,graph)
+    graph = NetworkUnity.get_graph_from_edgedata(edgedata, attr='Weight',
+                                                 directed=True, connected_component=True)
 
-def main_modularity():
-    DataDir = r'G:\data\transport\tokyo\Tokyo_2008_Original\Processed\grid\grid7000'
-    edgepath = DataDir + '\\edgedata.csv'
-    edgedata = pd.read_csv(edgepath)
+    # 根据度过滤网络
+    # NetworkUnity.degree_filter(graph,lower=0,upper=10)
 
-    res_path = DataDir + '\\cluster\\cluster_result_unweight.csv'
-    res_cluster = pd.read_csv(res_path)
-    q = NetworkUnity.modularity(res_cluster,edgedata=edgedata,directed=True,edge_weight=None)
+    # 计算节点特征
+    node_info = NetworkUnity.calculate_node_features(graph,weight='Weight')
+    print('----------------Node Feature-------------')
+    print(node_info.head())
+
+    #计算网络特征
+    graph_info = NetworkUnity.calculate_graph_features(graph)
+    print('----------------Graph Feature-------------')
+    print(graph_info)
+
+    #计算模块都
+    q = NetworkUnity.modularity(cluster_result,
+                                graph=graph,
+                                directed=True,
+                                edge_weight='Weight')
+    print('---------------- Modularity -------------')
     print(q)
 
-def main_cluster():
-    DataDir = r'G:\data\transport\tokyo\Tokyo_2008_Original\Processed\grid\grid7000'
-    edgepath = DataDir + '\\edgedata.csv'
-    edgedata = pd.read_csv(edgepath)
-    graph = NetworkUnity.get_graph_from_edgedata(edgedata,connected_component=True)
-    graph = NetworkUnity.degree_filter(graph,5)
+    #社区发现
+    print('---------------- Community dectect -------------')
     nodedata_1 = NetworkUnity.community_detect(graph, use_method=1, use_weight=None)
-    print(nodedata_1.head())
+    print(nodedata_1)
+
 
 
 if __name__ == '__main__':
-    import time
-    time_1 = time.clock()
-    main_cluster()
-    # main_modularity()
-    # main_filter()
-    print('---------RunTime----------')
-    print('%.3f s'%(time.clock()-time_1))
+    main_example()
+
 
 
