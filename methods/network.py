@@ -10,7 +10,8 @@
     * 从边数据生成网络 - get_graph_from_edgedata
     * 从边数据获取节点 - get_nodes_from_edgedata
     * 将有向边转化为无向边 - as_undirected_edgedata
-    * 计算网络的特征 - get_graph_info
+    * 计算网络的特征 - calculate_graph_features
+    * 计算节点的特征 - calculate_node_features
     * 根据度来过滤网络 - degree_filter
     * 计算模块度 - modularity
     * 社区发现 - community_detect
@@ -29,14 +30,11 @@
 
 
 备注：
-    2017.9.27.
-        1.需要增加从graph对象到dataframe的方法，获取graph的边和节点表，参考pygrahistry的 network2pandas
-            2017.10.10已增加 networkx2pandas方法
+    * 2017.10.10
+        - 增加计算模块度方法和社区发现方法
+        - 增加 networkx2pandas方法
 
-        2.结合igraph的社区发现，networkx的网络特征计算
-            2017.10.10日已经增加计算模块度方法和社区发现方法
-
-        3.接下来会补充一个example对各个数据的形式做一个展示
+    * 2017.10.17 - 增加计算节点特征的方法
 
 '''
 
@@ -134,15 +132,17 @@ class NetworkUnity():
         return graph
 
     @staticmethod
-    def get_graph_info(graph,centrality=True,save_path=''):
-        #用来计算图的各种网络特征，计算时间跟图的大小相关
+    def calculate_graph_features(graph,centrality=True,save_path=None):
         '''
         :param graph: graph对象,应该是连通的！
         :param centrality: 是否计算中心度信息
         :param save_path: 信息保存地址
         :return: graph的各种网络特征，pd.Series
+
+        用来计算图的各种网络特征，计算时间跟图的大小相关
+        大部分特征都是不加权计算的。
+        用字典来记载可能更好
         '''
-        # connected = nx.connected_component_subgraphs
         def _average(node_dic):
             if len(node_dic) < 1:
                 return 0
@@ -170,9 +170,12 @@ class NetworkUnity():
             cols.extend(['Directed','AveInDegree','AveOutDegree'])
         #中心性指标
         if centrality:
-            #度中心性
+            # 度中心性
             node_degree_centrality = nx.degree_centrality(graph)
             ave_degree_centrality = _average(node_degree_centrality)
+            # 特征向量中心度
+            node_eigenvector_centrality = nx.eigenvector_centrality(graph)
+            ave_eigenvector_centrality = _average(node_eigenvector_centrality)
             #介数中心度
             node_betweenness = nx.betweenness_centrality(graph)
             ave_betweenness_centrality = _average(node_betweenness)
@@ -180,17 +183,54 @@ class NetworkUnity():
             node_closeness = nx.closeness_centrality(graph)
             ave_closeness_centrality = _average(node_closeness)
             infos.extend([ave_degree_centrality,
+                          ave_eigenvector_centrality,
                           ave_betweenness_centrality,
                           ave_closeness_centrality])
             cols.extend(['AveDegreeCentrality',
-                            'AveBetweennessCentrality',
-                            'AveClosenessCentrality'])
+                         'AveEigenvectorCentrality',
+                         'AveBetweennessCentrality',
+                         'AveClosenessCentrality'])
 
         graph_info = pd.Series(infos,index=cols)
-        if len(save_path) != 0:
+        if save_path is not None:
             graph_info.to_csv(save_path,index=True,header=None)
-            print('File Saved : %s'%save_path)
+            print('File Saved : ', save_path)
         return graph_info
+
+    @staticmethod
+    def calculate_node_features(graph,weight=None,save_path=None):
+        '''
+        :param graph: networkx.Graph \ Digraph
+        :param weight: str, 某些指标是否使用边的权重，weight = 'Weight'
+        :param save_path: 保存地址
+        :return: DataFrame, node_features
+        '''
+        features = {}
+        features['Degree'] = nx.degree(graph)
+        features['DegreeCentrality'] = nx.degree_centrality(graph)
+        features['BetweennessCentrality'] = nx.betweenness_centrality(graph)
+        features['EigenvectorCentrality'] = nx.eigenvector_centrality(graph)
+        features['ClosenessCentrality'] = nx.closeness_centrality(graph)
+
+        if weight is not None:
+            features['WeightedDegree'] = nx.degree(graph,weight=weight)
+            features['WeightedBetweennessCentrality'] = nx.betweenness_centrality(graph,weight=weight)
+            features['WeightedEigenvectorCentrality'] = nx.eigenvector_centrality(graph,weight=weight)
+
+        if graph.is_directed():
+            features['InDegree'] = graph.in_degree()
+            features['OutDegree'] = graph.out_degree()
+
+        node_features = pd.DataFrame(features)
+        node_features['Id'] = node_features.index
+
+        if save_path is not None:
+            node_features.to_csv(save_path,header=None)
+            print('File Saved : ', save_path)
+
+        return node_features
+
+
 
     @staticmethod
     def degree_filter(graph,lower=None,upper=None):
