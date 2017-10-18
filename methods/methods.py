@@ -24,7 +24,7 @@ import os
 import random
 import pandas as pd
 import numpy as np
-
+import matplotlib.pyplot as plt
 
 def read_csv(readpath):
     '''
@@ -146,37 +146,83 @@ def dataframe_slice_by_timestamp(df,filter_dict):
     df = df.ix[ind_return,:]
     return df
 
-def distribution(sd):
+def distribution(data):
     '''
     计算数据的概率密度分布
-    :param sd: list 或者 pandas.Series.
+    :param data: list 或者 pandas.Series.
     :return: pandas.Series
     '''
-    if isinstance(sd,pd.Series):
-        pass
-    else:
-        sd = pd.Series(sd)
-    sd_count = sd.value_counts().sort_index()
-    sd_fre = sd_count/sd_count.sum()
-    return sd_fre
+    if not isinstance(data,pd.Series):
+        data = pd.Series(data)
+    data_count = data.value_counts().sort_index()
+    data_p = data_count/data_count.sum()
+    return data_p
 
-def distribution_cp(sd):
+def distribution_cp(data):
     '''
-    :purpose: calculate the cumulative probability distribution of a group data.
-    :param sd: list of pandas's Series.
+    计算累计概率密度分布
+    :param data: list 或者 Series
     :return: pandas's Series
     '''
-    sd = pd.Series(sd)
-    sd_count = sd.value_counts().sort_index()
-    sd_fre = sd_count/sd_count.sum()
-    origin_index = sd_fre.index.values
-    sd_fre.index = range(len(sd_fre))
-    sd_cp = sd_fre.copy()
-    #分布函数，X<x
-    for i in range(len(sd_fre)):
-        sd_cp[i] = sum(sd_fre[:i])
-    sd_cp.index = origin_index
-    return sd_cp
+    if not isinstance(data,pd.Series):
+        data = pd.Series(data)
+    data_count = data.value_counts().sort_index()
+    data_fre = data_count/data_count.sum()
+    origin_index = data_fre.index.values
+    data_fre.index = range(len(data_fre))
+    data_cp = data_fre.copy()
+    #分布函数，X < x
+    for i in range(len(data_fre)):
+        data_cp[i] = sum(data_fre[:i])
+    data_cp.index = origin_index
+    return data_cp
+
+def plot_distribution(data, subplot=2, data_norm=False, cmp=False, grid=True):
+    '''
+    :param data: Series数据
+    :param subplot: 绘制原始的，log 和 log-log
+    :param data_norm: 数据是否归一化，例如normlized degree
+    :param cmp: 是否绘制累计密度概率
+    :param grid: 网格线是否显示
+    :return: None
+    '''
+
+    if data_norm:
+        data_normed = normlize(data.values, 0, 1)
+        name = 'Normlized' + str(data.name)
+        data = pd.Series(data_normed, name=name)
+
+    ylabel = 'Probability'
+
+    if cmp:
+        data = distribution_cp(data)
+        ylabel = 'Cumulative ' + ylabel
+    else:
+        data = distribution(data)
+
+    fg = plt.figure()
+    ax1 = []
+    for i in range(subplot):
+        ax1.append(fg.add_subplot(1, subplot, i + 1))
+
+    data.plot(ax=ax1[0], style='*-')
+    ax1[0].set_title('Distribution')
+
+    if subplot >= 2:
+        data.plot(ax=ax1[1], style='*', logy=True, logx=True)
+        ax1[1].set_title('log-log')
+        # ax1[1].set_xlim([0, 50])
+
+    if subplot >= 3:
+        data.plot(ax=ax1[2], style='*-', logy=True)
+        ax1[2].set_title('semi-log')
+
+    for i in range(subplot):
+        ax1[i].set_ylabel(ylabel)
+        ax1[i].set_xlabel(data.name)
+        ax1[i].set_xlim([0, max(data.index) * 1.1])
+        ax1[i].grid(grid, alpha=0.8)
+
 
 def normlize(data,lower=0,upper=1):
     '''

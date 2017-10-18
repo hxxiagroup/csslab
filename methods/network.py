@@ -132,7 +132,7 @@ class NetworkUnity():
         return graph
 
     @staticmethod
-    def calculate_graph_features(graph,centrality=True,save_path=None):
+    def calculate_graph_features(graph,centrality=False,save_path=None):
         '''
         :param graph: graph对象,应该是连通的！
         :param centrality: 是否计算中心度信息
@@ -153,7 +153,7 @@ class NetworkUnity():
 
         if NODE_NUM < 1:
             print('Graph is empty')
-            return None
+            return pd.Series()
 
         features['Node'] = NODE_NUM
         features['Edge'] = graph.number_of_edges()
@@ -199,15 +199,23 @@ class NetworkUnity():
         return graph_info
 
     @staticmethod
-    def calculate_node_features(graph,weight=None,centrality =True, save_path=None):
+    def calculate_node_features(graph,weight=None,centrality=False, save_path=None):
         '''
         :param graph: networkx.Graph \ Digraph
         :param weight: str, 某些指标是否使用边的权重，weight = 'Weight'
+        :param centrality: 是否计算中心性指标
         :param save_path: 保存地址
         :return: DataFrame, node_features
         '''
+        if graph.number_of_nodes() < 1:
+            return pd.DataFrame()
+
         features = {}
         features['Degree'] = nx.degree(graph)
+
+        if graph.is_directed():
+            features['InDegree'] = graph.in_degree()
+            features['OutDegree'] = graph.out_degree()
 
         if centrality:
             features['DegreeCentrality'] = nx.degree_centrality(graph)
@@ -216,14 +224,15 @@ class NetworkUnity():
             features['ClosenessCentrality'] = nx.closeness_centrality(graph)
 
         if weight is not None:
+
             features['WeightedDegree'] = nx.degree(graph,weight=weight)
+            if graph.is_directed():
+                features['WeightedInDegree'] = graph.in_degree(weight=weight)
+                features['WeightedOutDegree'] = graph.out_degree(weight=weight)
+
             if centrality:
                 features['WeightedBetweennessCentrality'] = nx.betweenness_centrality(graph,weight=weight)
                 features['WeightedEigenvectorCentrality'] = nx.eigenvector_centrality_numpy(graph,weight=weight)
-
-        if graph.is_directed():
-            features['InDegree'] = graph.in_degree()
-            features['OutDegree'] = graph.out_degree()
 
         node_features = pd.DataFrame(features)
         node_features['Id'] = node_features.index
@@ -394,18 +403,20 @@ def main_example():
     print('------------Edgedata------------------')
     print(edgedata)
 
-    graph = NetworkUnity.get_graph_from_edgedata(edgedata, attr='Weight',
-                                                 directed=True, connected_component=True)
+    graph = NetworkUnity.get_graph_from_edgedata(edgedata,
+                                                 attr='Weight',
+                                                 directed=True,
+                                                 connected_component=True)
     # 根据度过滤网络
     # NetworkUnity.degree_filter(graph,lower=0,upper=10)
 
     # 计算节点特征
-    node_info = NetworkUnity.calculate_node_features(graph,weight='Weight')
+    node_info = NetworkUnity.calculate_node_features(graph,weight='Weight',centrality=True)
     print('----------------Node Feature-------------')
     print(node_info.head())
 
     #计算网络特征
-    graph_info = NetworkUnity.calculate_graph_features(graph)
+    graph_info = NetworkUnity.calculate_graph_features(graph,centrality=True)
     print('----------------Graph Feature-------------')
     print(graph_info)
 
