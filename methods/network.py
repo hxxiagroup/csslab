@@ -148,27 +148,30 @@ class NetworkUnity():
                 return 0
             else:
                 return np.average(list(node_dic.values()))
-        node_num = graph.number_of_nodes()
-        edge_num = graph.number_of_edges()
-        density = nx.density(graph)
-        ave_degree = _average(graph.degree())
-        infos = [node_num, edge_num, density, ave_degree]
-        cols = [ 'NodeNum', 'EdgeNum', 'Density', 'AveDegree']
-        #有向图和无向图
+        features = {}
+        NODE_NUM = graph.number_of_nodes()
+
+        if NODE_NUM < 1:
+            print('Graph is empty')
+            return None
+
+        features['Node'] = NODE_NUM
+        features['Edge'] = graph.number_of_edges()
+        features['Density'] = nx.density(graph)
+        features['AveDegree'] = _average(graph.degree())
+        # features['Diameter'] = nx.diameter(graph)
+
+        # 有向图和无向图
         if not graph.is_directed():
-            directed = 0
-            ave_clustering_coefficient = nx.average_clustering(graph)
-            ave_shortest_path_length = nx.average_shortest_path_length()
-            infos.extend([directed,ave_clustering_coefficient,ave_shortest_path_length])
-            cols.extend(['Directed','AveClusterCoefficent','AveShortestPathLength'])
+            features['Directed'] = 0
+            features['AveClusterCoefficent'] = nx.average_clustering(graph)
+            features['AveShortestPathLength'] = nx.average_shortest_path_length(graph)
         else:
-            ave_indegree = _average(graph.in_degree())
-            ave_outdegree = _average(graph.out_degree())
-            directed = 1
-            #判断是否为空图
-            infos.extend([directed,ave_indegree,ave_outdegree])
-            cols.extend(['Directed','AveInDegree','AveOutDegree'])
-        #中心性指标
+            features['Directed'] = 1
+            features['AveInDegree'] = _average(graph.in_degree())
+            features['AveOutDegree'] = _average(graph.out_degree())
+
+        # 中心性指标
         if centrality:
             # 度中心性
             node_degree_centrality = nx.degree_centrality(graph)
@@ -182,23 +185,21 @@ class NetworkUnity():
             #接近中心度
             node_closeness = nx.closeness_centrality(graph)
             ave_closeness_centrality = _average(node_closeness)
-            infos.extend([ave_degree_centrality,
-                          ave_eigenvector_centrality,
-                          ave_betweenness_centrality,
-                          ave_closeness_centrality])
-            cols.extend(['AveDegreeCentrality',
-                         'AveEigenvectorCentrality',
-                         'AveBetweennessCentrality',
-                         'AveClosenessCentrality'])
 
-        graph_info = pd.Series(infos,index=cols)
+            features['AveDegreeCentrality'] = ave_degree_centrality
+            features['AveEigenvectorCentrality'] = ave_eigenvector_centrality
+            features['AveBetweennessCentrality'] = ave_betweenness_centrality
+            features['AveClosenessCentrality'] = ave_closeness_centrality
+
+        graph_info = pd.Series(features)
         if save_path is not None:
             graph_info.to_csv(save_path,index=True,header=None)
             print('File Saved : ', save_path)
+
         return graph_info
 
     @staticmethod
-    def calculate_node_features(graph,weight=None,save_path=None):
+    def calculate_node_features(graph,weight=None,centrality =True, save_path=None):
         '''
         :param graph: networkx.Graph \ Digraph
         :param weight: str, 某些指标是否使用边的权重，weight = 'Weight'
@@ -207,15 +208,18 @@ class NetworkUnity():
         '''
         features = {}
         features['Degree'] = nx.degree(graph)
-        features['DegreeCentrality'] = nx.degree_centrality(graph)
-        features['BetweennessCentrality'] = nx.betweenness_centrality(graph)
-        features['EigenvectorCentrality'] = nx.eigenvector_centrality_numpy(graph)
-        features['ClosenessCentrality'] = nx.closeness_centrality(graph)
+
+        if centrality:
+            features['DegreeCentrality'] = nx.degree_centrality(graph)
+            features['BetweennessCentrality'] = nx.betweenness_centrality(graph)
+            features['EigenvectorCentrality'] = nx.eigenvector_centrality_numpy(graph)
+            features['ClosenessCentrality'] = nx.closeness_centrality(graph)
 
         if weight is not None:
             features['WeightedDegree'] = nx.degree(graph,weight=weight)
-            features['WeightedBetweennessCentrality'] = nx.betweenness_centrality(graph,weight=weight)
-            features['WeightedEigenvectorCentrality'] = nx.eigenvector_centrality_numpy(graph,weight=weight)
+            if centrality:
+                features['WeightedBetweennessCentrality'] = nx.betweenness_centrality(graph,weight=weight)
+                features['WeightedEigenvectorCentrality'] = nx.eigenvector_centrality_numpy(graph,weight=weight)
 
         if graph.is_directed():
             features['InDegree'] = graph.in_degree()
@@ -392,7 +396,6 @@ def main_example():
 
     graph = NetworkUnity.get_graph_from_edgedata(edgedata, attr='Weight',
                                                  directed=True, connected_component=True)
-
     # 根据度过滤网络
     # NetworkUnity.degree_filter(graph,lower=0,upper=10)
 
