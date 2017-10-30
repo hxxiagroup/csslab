@@ -9,6 +9,7 @@
             * 指数分布
             * 韦布尔分布
             * 伽马分布
+            * 指数阶段的幂率分布
 
 方法：
     分布拟合 - FitModel.fit
@@ -40,13 +41,15 @@ class FitModel():
                     'exponential',
                     'gamma',
                     'lognormal',
-                    'weibull']
+                    'weibull',
+                    'exponential_powerlaw']
 
-    INIT_PARA_DIC = {'powerlaw': [1.5],
-                     'exponential': [0.5],
-                     'gamma': [0.5, 2],
-                     'lognormal': [-0.5, 2],
-                     'weibull': [1, 2], }
+    INIT_PARA_DIC = {'powerlaw': [1,1.5],
+                     'exponential': [2],
+                     'gamma': [1, 2],
+                     'lognormal': [3, 2],
+                     'weibull': [1, 2],
+                     'exponential_powerlaw':[5.3,1.5,0.9]}
 
     DISTRIBUTION_DIC = {each: 'FitModel.' + each for each in DISTRIBUTION}
 
@@ -55,20 +58,18 @@ class FitModel():
         :param data: 数据为pd.Series数据
         '''
         self.origin_data = data
-
         if data is not None:
             self.data_pdf = FitModel.distribution_pdf(data)
-
         self.summary = []
 
-    # --------------下面都为概率密度函数------------------
+    # ----------------------------------------------------------------------------
+    @staticmethod
+    def powerlaw(x, a, beta):
+        return a * (x ** (-beta))
+
     @staticmethod
     def lognormal(x, mu, sigmma):
         return 1 / (x * sigmma * np.sqrt(2 * np.pi)) * np.exp(((np.log(x) - mu) ** 2) / (-2 * sigmma * sigmma))
-
-    @staticmethod
-    def powerlaw(x, beta):
-        return (beta - 1) * (x ** (-beta))
 
     @staticmethod
     def exponential(x, lam):
@@ -76,24 +77,19 @@ class FitModel():
 
     @staticmethod
     def weibull(x, alpha, beta):
-        '''
-        对比一致
-        :param x:
-        :param alpha: k
-        :param beta: lambda
-        :return:
-        '''
-
+        '''对比一致'''
         return (alpha / beta) * ((x / beta) ** (alpha - 1)) * np.exp(-((x / beta) ** alpha))
 
     @staticmethod
     def gamma(x, alpha, beta):
-        # 检测一致
+        '''检测一致'''
         return ((beta ** alpha) / gammafunction(alpha)) * (x ** (alpha - 1)) * np.exp(-beta * x)
 
-    # @staticmethod
-    # def truncated_powerlaw(x, beta, lam):
-    #     return (x + x0) ** (-a) * np.exp(-b * x)
+    @staticmethod
+    def exponential_powerlaw(x, x0, beta, alpha):
+        return (x + x0) ** (-beta) * np.exp(-alpha * x)
+
+    # ----------------------------------------------------------------------------
 
     @staticmethod
     def distribution_pdf(data):
@@ -104,30 +100,25 @@ class FitModel():
             '''
         if data is None:
             return None
-
         if not isinstance(data, pd.Series):
             data = pd.Series(data)
         data_count = data.value_counts().sort_index()
         data_p = data_count / data_count.sum()
         return data_p
 
-    def fit(self, distribution, data=None, head=None, tail=None, initial_para=None):
+    def fit(self, distribution, data=None, x_max=None, x_min=None, initial_para=None):
+        '''
+        对数据的概率密度分布进行拟合。
+        拟合的信息会保存成Dict,包括:'distribution','popt', 'pcov', 'data_pdf','xdata','ydata'
+        保存到模型的summary 中，以便查询和绘制结果
 
-        if data is None:
-            if self.origin_data is None:
-                print('- - Data is None - -')
-                return None
-            else:
-                data = self.origin_data
-
-        if head is not None:
-            data = data[data > head].copy()
-
-        if tail is not None:
-            data = data[data < tail].copy()
-
-        fit_data = data
-
+        :param distribution: 分布名称
+        :param data: 需要分布拟合的数据
+        :param x_max: 拟合分布图像的上限
+        :param x_min: 拟合分布图像的下限
+        :param initial_para: 拟合分布初始参数
+        :return: 拟合的信息，dict
+        '''
         if initial_para is None:
             if distribution in FitModel.INIT_PARA_DIC.keys():
                 initial_para = FitModel.INIT_PARA_DIC.get(distribution)
@@ -135,34 +126,48 @@ class FitModel():
                 print('- - 拟合的分布未定义 - - ')
                 return None
 
-        data_pdf = FitModel.distribution_pdf(fit_data)
+        if data is None:
+            if self.origin_data is None:
+                print('- - Data is None - -')
+                return None
+            else:
+                data_pdf = self.data_pdf
+        else:
+            data_pdf = FitModel.distribution_pdf(data)
+
+        if x_max is not None:
+            data_pdf = data_pdf[data_pdf.index < x_max].copy()
+
+        if x_min is not None:
+            data_pdf = data_pdf[data_pdf.index > x_min].copy()
 
         xdata_fit = data_pdf.index.values
         ydata_fit = data_pdf.values
 
         fit_distribution = FitModel.DISTRIBUTION_DIC.get(distribution)
-        print(fit_distribution)
-        # print(initial_para)
 
         popt, pcov = optimize.curve_fit(eval(fit_distribution), xdata_fit, ydata_fit, p0=initial_para)
 
         fit_info = {'distribution': fit_distribution,
                     'popt': popt,
                     'pcov': pcov,
-                    'fit_data': fit_data,
+                    'data_pdf':data_pdf,
                     'xdata': xdata_fit,
                     'ydata': ydata_fit}
-
         self.summary.append(fit_info)
 
+        print('------------ 拟合分布 %s -------------' % fit_distribution)
         print('- - Optimal Parameters : ',popt)
         print('-Estimated Covariance : ',pcov)
+        return fit_info
 
-    def plot_model(self, plot_style=0, mfrow=None):
+    def plot_model(self,log_log=True,style=0, mfrow=None):
         '''
-        :param plot_style: 绘制的风格
+        :param log_log: 是否为log_log
+        :param style: 绘制的风格
             0 - 所有拟合绘制在一起
             1 - 拟合结果分多个ax绘制
+        :param mfrow: 图片分割方式，如果style为1的话，可以指定
         :return:
         '''
         if len(self.summary) < 1:
@@ -170,21 +175,23 @@ class FitModel():
             return None
 
         fig = plt.figure()
-
-        if plot_style == 0:
+        if style == 0:
             ax = fig.add_subplot(1, 1, 1)
-            ax.plot(self.data_pdf.index.values, self.data_pdf.values, '*')
+            ax.plot(self.data_pdf.index.values, self.data_pdf.values, 'k+')
             for model in self.summary:
                 xdata = model.get('xdata')
                 para = model.get('popt')
                 distribution = model.get('distribution')
                 fit_funtion = model.get('distribution') + '(xdata, *para)'
                 ydata = eval(fit_funtion)
+
                 ax.plot(xdata, ydata, label=distribution.replace('FitModel.', ''))
                 ax.legend()
-                ax.ylabel('Pr')
-
-        if plot_style == 1:
+            ax.set_ylabel('Pr')
+            if log_log:
+                ax.set_yscale('log')
+                ax.set_xscale('log')
+        if style == 1:
             model_num = len(self.summary)
             if mfrow is None:
                 # 设置图片分割方式，如果没有的话
@@ -198,18 +205,18 @@ class FitModel():
             axes = []
             for i, model in enumerate(self.summary):
                 axes.append(fig.add_subplot(mfrow[0], mfrow[1], i + 1))
-
                 xdata = model.get('xdata')
                 para = model.get('popt')
                 distribution = model.get('distribution')
                 fit_funtion = model.get('distribution') + '(xdata, *para)'
                 ydata = eval(fit_funtion)
-
                 axes[i].plot(self.data_pdf.index.values, self.data_pdf.values, '*')
                 axes[i].plot(xdata, ydata, label=distribution.replace('FitModel.', ''))
                 axes[i].legend()
-                axes[i].ylabel('Pr')
-
+                axes[i].set_ylabel('Pr')
+                if log_log:
+                    axes[i].set_yscale('log')
+                    axes[i].set_xscale('log')
         plt.show()
 
 
@@ -226,22 +233,19 @@ def test():
 
 
 def test_model():
-    DataDir = 'G:\\data'
-
-    path_dis = DataDir + 'DistanceAC.csv'
-
+    DataDir = r'G:\data'
+    path_dis = DataDir + '\\DistanceAC.csv'
     data = pd.read_csv(path_dis, header=0)
-
+    data = data['DistanceAC']
     data = data[data > 0]
-
+    # -----------------------------------------------
     model = FitModel(data=data)
 
-    model.fit(distribution='exponential', head=8)
-
+    model.fit(distribution='exponential', x_max=8)
     model.fit(distribution='lognormal')
+    model.fit(distribution='gamma')
 
-    model.plot_model(plot_style=1, mfrow=(1, 2))
-
+    model.plot_model(style=1)
 
 if __name__ == '__main__':
     test_model()
