@@ -9,7 +9,7 @@
             * 指数分布
             * 韦布尔分布
             * 伽马分布
-            * 指数阶段的幂率分布
+            * 指数截断的幂率分布
 
 方法：
     分布拟合 - FitModel.fit
@@ -18,13 +18,16 @@
 
 数据：
     data, 为pandas.Series数据类型
+    data_pdf，pandas.Series数据类型，index为xdata,values为ydata(概率密度)
+        也可以使用data_pdf来做一般性质的曲线拟合
 
 备注：
 
     * 2017.10.27
         目前只是数据的分布进行拟合，后面可以再扩展成曲线的拟合较好
-        绘制方法还需要改进
         支持的分布需要继续增加
+    * 2017.10.30
+        拓展曲线拟合，使用Fitmodel(data_pdf)，用data_pdf代替拟合的数据，就是曲线的拟合了。
 
 '''
 
@@ -45,7 +48,7 @@ class FitModel():
                     'exponential_powerlaw']
 
     INIT_PARA_DIC = {'powerlaw': [1,1.5],
-                     'exponential': [2],
+                     'exponential': [1,2],
                      'gamma': [1, 2],
                      'lognormal': [3, 2],
                      'weibull': [1, 2],
@@ -53,13 +56,16 @@ class FitModel():
 
     DISTRIBUTION_DIC = {each: 'FitModel.' + each for each in DISTRIBUTION}
 
-    def __init__(self, data=None):
+    def __init__(self, data=None,data_pdf=None):
         '''
         :param data: 数据为pd.Series数据
+        :param data_pdf: pd.Series, index为xdata，values为probability
         '''
         self.origin_data = data
-        if data is not None:
+        if data_pdf is None and data is not None:
             self.data_pdf = FitModel.distribution_pdf(data)
+        else:
+            self.data_pdf = data_pdf
         self.summary = []
 
     # ----------------------------------------------------------------------------
@@ -72,8 +78,8 @@ class FitModel():
         return 1 / (x * sigmma * np.sqrt(2 * np.pi)) * np.exp(((np.log(x) - mu) ** 2) / (-2 * sigmma * sigmma))
 
     @staticmethod
-    def exponential(x, lam):
-        return np.exp(-lam * x)
+    def exponential(x, a, lam):
+        return a * np.exp(-lam * x)
 
     @staticmethod
     def weibull(x, alpha, beta):
@@ -106,7 +112,7 @@ class FitModel():
         data_p = data_count / data_count.sum()
         return data_p
 
-    def fit(self, distribution, data=None, x_max=None, x_min=None, initial_para=None):
+    def fit(self, distribution, data=None, data_pdf=None, x_max=None, x_min=None, initial_para=None):
         '''
         对数据的概率密度分布进行拟合。
         拟合的信息会保存成Dict,包括:'distribution','popt', 'pcov', 'data_pdf','xdata','ydata'
@@ -114,6 +120,7 @@ class FitModel():
 
         :param distribution: 分布名称
         :param data: 需要分布拟合的数据
+        :param data_pdf: 概率密度分布数据
         :param x_max: 拟合分布图像的上限
         :param x_min: 拟合分布图像的下限
         :param initial_para: 拟合分布初始参数
@@ -126,20 +133,23 @@ class FitModel():
                 print('- - 拟合的分布未定义 - - ')
                 return None
 
-        if data is None:
-            if self.origin_data is None:
-                print('- - Data is None - -')
-                return None
-            else:
+        if data_pdf is None:
+            if self.data_pdf is not None:
+                #self.origin_data不是空的，那么self.data_pdf一定不是空
                 data_pdf = self.data_pdf
-        else:
-            data_pdf = FitModel.distribution_pdf(data)
+            else:
+                data_pdf = FitModel.distribution_pdf(data)
+                if data_pdf is None:
+                    print('Error: Data is None')
+                    return None
+                else:
+                    self.data_pdf = data_pdf
 
         if x_max is not None:
-            data_pdf = data_pdf[data_pdf.index < x_max].copy()
+            data_pdf = data_pdf[data_pdf.index < x_max]
 
         if x_min is not None:
-            data_pdf = data_pdf[data_pdf.index > x_min].copy()
+            data_pdf = data_pdf[data_pdf.index > x_min]
 
         xdata_fit = data_pdf.index.values
         ydata_fit = data_pdf.values
