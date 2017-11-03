@@ -2,17 +2,12 @@
 简介：
     对数据的分布进行拟合
     即，概率密度函数符合哪种分布！！！ 并不是曲线拟合！！
-        基于scipy.optimize曲线拟合模型
-        目前支持：
-            * 幂率分布
-            * 对数正太
-            * 指数分布
-            * 韦布尔分布
-            * 伽马分布
-            * 指数截断的幂率分布
+        基于scipy中的stats和otimize两种方法
+
 
 方法：
-    分布拟合 - FitModel.fit
+    分布拟合 - FitModel.fit - 基于scipy.stats的连续随机变量的拟合方法
+    分布拟合 - FitModel.fit2 - 基于scipy.optimize.curvefit 的 频率密度直方图的数据进行曲线拟合
     绘制拟合 - FitMofel.plot_model
 
 
@@ -29,32 +24,57 @@
     * 2017.10.30
         拓展曲线拟合，使用Fitmodel(data_pdf)，用data_pdf代替拟合的数据，就是曲线的拟合了。
 
+
+    * 2017.11.1 - 重要
+        修复严重错误，关于概率密度的计算，原来采用频率来作为概率
+        目前改为np.histgram方法来计算密度
+            第二中方法跟R语言中的density方法给出的结果一致，（也是张凌师兄的计算方法）
+
+        第二，采用optimize.curfit方法得到的最优解，跟R语言中的fitdistplus包的结果差别较大
+
+            发现scipy中有更好的曲线拟合方法，scipy.stats中的fit方法,好像数据过大，拟合时间较长
+            接下来考虑用scipy.stats中分分布的拟合方法来做
+                -存在的一个问题是，stats中所有的分布都采用统一的形式，对于分布的都采用loc,scale来控制，这可能也比较难理解
+                -但是估计拟合的结果应该跟R中差不多
+
+
 '''
 
 import numpy as np
-import scipy.stats
+
 import pandas as pd
-from scipy.special import gamma as gammafunction
+from scipy.special import gamma as _gamma
+from scipy import stats
 from scipy import optimize
 import matplotlib.pyplot as plt
 
 
 class FitModel():
-    DISTRIBUTION = ['powerlaw',
+
+    DEFINED_DIST = ['powerlaw',
                     'exponential',
                     'gamma',
                     'lognormal',
                     'weibull',
                     'exponential_powerlaw']
 
-    INIT_PARA_DIC = {'powerlaw': [1,1.5],
-                     'exponential': [1,2],
-                     'gamma': [1, 2],
-                     'lognormal': [3, 2],
-                     'weibull': [1, 2],
-                     'exponential_powerlaw':[5.3,1.5,0.9]}
+    STATS_DIST = ['lognorm',
+                  'expon',
+                  'powerlaw',
+                  'gamma',
+                  'exponpow',
+                  'norm',
+                  'truncexpon',
+                  'weibull_min',
+                  'weibull_max'
+                  ]
 
-    DISTRIBUTION_DIC = {each: 'FitModel.' + each for each in DISTRIBUTION}
+    INIT_PARA = {'powerlaw': [1,1.5],
+                     'expon': [1,2],
+                     'gamma': [1, 2],
+                     'lognorm': [3, 2],
+                     'weibull': [1, 2],
+                     'exponpow':[5.3,1.5,0.9]}
 
     def __init__(self, data=None,data_pdf=None):
         '''
@@ -70,16 +90,16 @@ class FitModel():
 
     # ----------------------------------------------------------------------------
     @staticmethod
-    def powerlaw(x, a, beta):
-        return a * (x ** (-beta))
+    def powerlaw(x, beta):
+        return (beta-1) * (x ** (-beta))
 
     @staticmethod
-    def lognormal(x, mu, sigmma):
+    def lognorm(x, mu, sigmma):
         return 1 / (x * sigmma * np.sqrt(2 * np.pi)) * np.exp(((np.log(x) - mu) ** 2) / (-2 * sigmma * sigmma))
 
     @staticmethod
-    def exponential(x, a, lam):
-        return a * np.exp(-lam * x)
+    def expon(x,lam):
+        return lam * np.exp(-lam * x)
 
     @staticmethod
     def weibull(x, alpha, beta):
@@ -89,18 +109,18 @@ class FitModel():
     @staticmethod
     def gamma(x, alpha, beta):
         '''检测一致'''
-        return ((beta ** alpha) / gammafunction(alpha)) * (x ** (alpha - 1)) * np.exp(-beta * x)
+        return ((beta ** alpha) / _gamma(alpha)) * (x ** (alpha - 1)) * np.exp(-beta * x)
 
     @staticmethod
-    def exponential_powerlaw(x, x0, beta, alpha):
+    def exponpow(x, x0, beta, alpha):
         return (x + x0) ** (-beta) * np.exp(-alpha * x)
 
     # ----------------------------------------------------------------------------
 
     @staticmethod
-    def distribution_pdf(data):
+    def distribution_absolute_pdf(data):
         '''
-            计算数据的概率密度分布
+            计算数据的概率密度分布,最后的概率值加起来都等于1
             :param data: list 或者 pandas.Series.
             :return: pandas.Series
             '''
@@ -112,7 +132,23 @@ class FitModel():
         data_p = data_count / data_count.sum()
         return data_p
 
-    def fit(self, distribution, data=None, data_pdf=None, x_max=None, x_min=None, initial_para=None):
+    @staticmethod
+    def distribution_pdf(data,bins=None):
+        '''
+        :param data:
+        :return:
+        '''
+        if data is None:
+            return None
+
+        if bins is None:
+            bins = 512
+        density,xdata = np.histogram(data,bins=bins,density=True)
+        xdata = (xdata + np.roll(xdata,-1))[:-1]/2.0
+        data_pdf = pd.Series(density,index=xdata)
+        return data_pdf
+
+    def fit2(self, distribution, data=None, data_pdf=None, x_max=None, x_min=None, initial_para=None):
         '''
         对数据的概率密度分布进行拟合。
         拟合的信息会保存成Dict,包括:'distribution','popt', 'pcov', 'data_pdf','xdata','ydata'
@@ -127,8 +163,8 @@ class FitModel():
         :return: 拟合的信息，dict
         '''
         if initial_para is None:
-            if distribution in FitModel.INIT_PARA_DIC.keys():
-                initial_para = FitModel.INIT_PARA_DIC.get(distribution)
+            if distribution in FitModel.INIT_PARA.keys():
+                initial_para = FitModel.INIT_PARA.get(distribution)
             else:
                 print('- - 拟合的分布未定义 - - ')
                 return None
@@ -139,11 +175,14 @@ class FitModel():
                 data_pdf = self.data_pdf
             else:
                 data_pdf = FitModel.distribution_pdf(data)
+
                 if data_pdf is None:
                     print('Error: Data is None')
                     return None
                 else:
                     self.data_pdf = data_pdf
+        else:
+            self.data_pdf = data_pdf
 
         if x_max is not None:
             data_pdf = data_pdf[data_pdf.index < x_max]
@@ -151,25 +190,77 @@ class FitModel():
         if x_min is not None:
             data_pdf = data_pdf[data_pdf.index > x_min]
 
-        xdata_fit = data_pdf.index.values
-        ydata_fit = data_pdf.values
+        xdata = np.asarray(data_pdf.index.values)
+        ydata = np.asarray(data_pdf.values)
 
-        fit_distribution = FitModel.DISTRIBUTION_DIC.get(distribution)
 
-        popt, pcov = optimize.curve_fit(eval(fit_distribution), xdata_fit, ydata_fit, p0=initial_para)
+        fit_distribution = getattr(FitModel,distribution)
 
-        fit_info = {'distribution': fit_distribution,
-                    'popt': popt,
+
+        popt, pcov = optimize.curve_fit(fit_distribution, xdata, ydata, p0=initial_para)
+        fit_pdf = fit_distribution(xdata,*popt)
+
+        sse = np.sum(np.power(data_pdf.values - fit_pdf, 2.0))
+
+        fit_info = {'method':'FitModel',
+                    'distribution': distribution,
+                    'para': popt,
                     'pcov': pcov,
+                    'sse':sse,
                     'data_pdf':data_pdf,
-                    'xdata': xdata_fit,
-                    'ydata': ydata_fit}
+                    'xdata': xdata,
+                    'ydata': ydata,
+                    'fit_pdf':fit_pdf}
         self.summary.append(fit_info)
 
         print('------------ 拟合分布 %s -------------' % fit_distribution)
         print('- - Optimal Parameters : ',popt)
         print('-Estimated Covariance : ',pcov)
         return fit_info
+
+
+    def fit(self,distribution,data=None,x_max=None,x_min=None):
+
+        if distribution in FitModel.STATS_DIST:
+            fit_distribution = getattr(stats,distribution)
+        else:
+            print('- - scipy.satas 未定义改分布 - - ')
+            return None
+
+        if data is None and self.origin_data is not None:
+            data = self.origin_data
+
+        if x_max is not None:
+            data = data[data.index < x_max]
+
+        if x_min is not None:
+            data = data[data.index > x_min]
+
+        # 开始拟合 --------------------
+        print('------------ 拟合分布 %s -------------' % fit_distribution)
+        para = fit_distribution.fit(data,floc=0)
+        arg = para[:-2]
+        loc = para[-2]
+        scale = para[-1]
+        data_pdf = FitModel.distribution_pdf(data)
+
+        xdata = data_pdf.index.values
+        ydata = data_pdf.values
+
+        fit_pdf = fit_distribution.pdf(xdata,*arg,loc=loc,scale=scale)
+        sse = np.sum(np.power(data_pdf.values - fit_pdf, 2.0))
+
+        fit_info = {'method':'stats',
+                    'distribution': distribution,
+                    'para': para,
+                    'pcov': sse,
+                    'sse':sse,
+                    'data_pdf': data_pdf,
+                    'xdata': xdata,
+                    'ydata': ydata,
+                    'fit_pdf':fit_pdf}
+        self.summary.append(fit_info)
+
 
     def plot_model(self,log_log=True,style=0, mfrow=None):
         '''
@@ -190,17 +281,16 @@ class FitModel():
             ax.plot(self.data_pdf.index.values, self.data_pdf.values, 'k+')
             for model in self.summary:
                 xdata = model.get('xdata')
-                para = model.get('popt')
+                para = model.get('para')
                 distribution = model.get('distribution')
-                fit_funtion = model.get('distribution') + '(xdata, *para)'
-                ydata = eval(fit_funtion)
-
-                ax.plot(xdata, ydata, label=distribution.replace('FitModel.', ''))
+                ydata = model.get('fit_pdf')
+                ax.plot(xdata, ydata, label=distribution)
                 ax.legend()
             ax.set_ylabel('Pr')
             if log_log:
                 ax.set_yscale('log')
                 ax.set_xscale('log')
+
         if style == 1:
             model_num = len(self.summary)
             if mfrow is None:
@@ -216,19 +306,29 @@ class FitModel():
             for i, model in enumerate(self.summary):
                 axes.append(fig.add_subplot(mfrow[0], mfrow[1], i + 1))
                 xdata = model.get('xdata')
-                para = model.get('popt')
+                para = model.get('para')
                 distribution = model.get('distribution')
-                fit_funtion = model.get('distribution') + '(xdata, *para)'
-                ydata = eval(fit_funtion)
-                axes[i].plot(self.data_pdf.index.values, self.data_pdf.values, '*')
-                axes[i].plot(xdata, ydata, label=distribution.replace('FitModel.', ''))
+                ydata = model.get('fit_pdf')
+
+                fit_distribution = getattr(eval(model.get('method')),distribution)
+                print(para)
+                arg = para[:-2]
+                loc = para[-2]
+                scale = para[-1]
+                ydata_2 = fit_distribution.pdf(xdata,*arg,loc=loc,scale=scale)
+
+                axes[i].plot(self.data_pdf.index.values, self.data_pdf.values, 'k+')
+                axes[i].plot(xdata, ydata, label=distribution)
+                axes[i].plot(xdata,ydata_2,label='Fit')
+
                 axes[i].legend()
                 axes[i].set_ylabel('Pr')
                 if log_log:
                     axes[i].set_yscale('log')
                     axes[i].set_xscale('log')
-        plt.show()
 
+        plt.show()
+        return fig
 
 def test():
     xdata = np.linspace(0.1, 2.5, 100)
@@ -250,11 +350,9 @@ def test_model():
     data = data[data > 0]
     # -----------------------------------------------
     model = FitModel(data=data)
-
-    model.fit(distribution='exponential', x_max=8)
-    model.fit(distribution='lognormal')
+    model.fit(distribution='expon', x_max=8)
+    model.fit(distribution='lognorm')
     model.fit(distribution='gamma')
-
     model.plot_model(style=1)
 
 if __name__ == '__main__':
