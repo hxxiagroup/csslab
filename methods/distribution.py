@@ -24,19 +24,23 @@
     * 2017.10.30
         拓展曲线拟合，使用Fitmodel(data_pdf)，用data_pdf代替拟合的数据，就是曲线的拟合了。
 
-
     * 2017.11.1 - 重要
         修复严重错误，关于概率密度的计算，原来采用频率来作为概率
         目前改为np.histgram方法来计算密度
             第二中方法跟R语言中的density方法给出的结果一致，（也是张凌师兄的计算方法）
 
         第二，采用optimize.curfit方法得到的最优解，跟R语言中的fitdistplus包的结果差别较大
-
             发现scipy中有更好的曲线拟合方法，scipy.stats中的fit方法,好像数据过大，拟合时间较长
             接下来考虑用scipy.stats中分分布的拟合方法来做
                 -存在的一个问题是，stats中所有的分布都采用统一的形式，对于分布的都采用loc,scale来控制，这可能也比较难理解
                 -但是估计拟合的结果应该跟R中差不多
-
+    * 2017.11.7
+        修改了拟合结果
+        增加了r2的计算
+        - - 应该提供保存拟合模型的方法和追加拟合好模型的方法，这样就不用重复拟合工作了
+             save_model
+             read_model
+             add_model
 
 '''
 
@@ -115,12 +119,10 @@ class FitModel():
     def exponpow(x, x0, beta, alpha):
         return (x + x0) ** (-beta) * np.exp(-alpha * x)
 
-    # ----------------------------------------------------------------------------
-
     @staticmethod
     def distribution_absolute_pdf(data):
         '''
-            计算数据的概率密度分布,最后的概率值加起来都等于1
+            计算数据的频率密度分布,最后的概率值加起来都等于1
             :param data: list 或者 pandas.Series.
             :return: pandas.Series
             '''
@@ -135,8 +137,9 @@ class FitModel():
     @staticmethod
     def distribution_pdf(data,bins=None):
         '''
-        :param data:
-        :return:
+        用频率密度直方图来估计概率密度分布
+        :param data: 数据
+        :return: data_pdf，pandas.Series
         '''
         if data is None:
             return None
@@ -147,6 +150,39 @@ class FitModel():
         xdata = (xdata + np.roll(xdata,-1))[:-1]/2.0
         data_pdf = pd.Series(density,index=xdata)
         return data_pdf
+
+    @staticmethod
+    def save_model(model,save_path):
+        '''后来发现这种方法也可以，那就直接储存实例好了'''
+        import pickle
+        with open(save_path,'wb') as f:
+            pickle.dump(model,f)
+
+    @staticmethod
+    def load_model(save_path):
+        import pickle
+        with open(save_path, 'rb') as f:
+            model = pickle.load(f)
+        return model
+
+
+    def r2(self,y,y_fit):
+        from sklearn.metrics import r2_score
+        '''
+        检验过了，符合r2的计算公式
+        r2 = 1 - sse/sst
+        '''
+        r2 = r2_score(y,y_fit)
+        return round(r2,4)
+
+    def calculate_r2(self,y,y_fit):
+        y = np.asarray(y)
+        y_fit = np.asarray(y_fit)
+        mean_y = np.mean(y)
+        sse = np.sum(np.power(y - y_fit, 2.0))
+        sst = np.sum(np.power(y-mean_y,2.0))
+        r2 = 1 - sse/sst
+        return round(r2,4)
 
     def fit2(self, distribution, data=None, data_pdf=None, x_max=None, x_min=None, initial_para=None):
         '''
@@ -160,7 +196,7 @@ class FitModel():
         :param x_max: 拟合分布图像的上限
         :param x_min: 拟合分布图像的下限
         :param initial_para: 拟合分布初始参数
-        :return: 拟合的信息，dict
+        :return: 拟合的结果，dict
         '''
         if initial_para is None:
             if distribution in FitModel.INIT_PARA.keys():
@@ -193,73 +229,85 @@ class FitModel():
         xdata = np.asarray(data_pdf.index.values)
         ydata = np.asarray(data_pdf.values)
 
+        try:
+            fit_dist = getattr(FitModel,distribution)
+        except AttributeError as e:
+            print(' - - FitModel 还不支持分布 ',distribution)
+            return None
 
-        fit_distribution = getattr(FitModel,distribution)
+        print('------------ 拟合分布 %s -------------' % fit_dist)
+        para, pcov = optimize.curve_fit(fit_dist, xdata, ydata, p0=initial_para)
+        y_fit = fit_dist(xdata,*para)
 
+        r2 = self.r2(ydata,y_fit)
 
-        popt, pcov = optimize.curve_fit(fit_distribution, xdata, ydata, p0=initial_para)
-        fit_pdf = fit_distribution(xdata,*popt)
+        res = {'method': 'FitModel',
+                'dist_name': distribution,
+                'fit_dist': fit_dist,
+                'para': para,
+                'pcov': pcov,
+                'r2': r2,
+                'data_pdf': data_pdf,
+                'xdata': xdata,
+                'ydata': ydata,
+                'ydata_fit': y_fit}
+        self.summary.append(res)
+        print('- - para - - ',para)
+        print('- - r2 - - ', r2)
 
-        sse = np.sum(np.power(data_pdf.values - fit_pdf, 2.0))
-
-        fit_info = {'method':'FitModel',
-                    'distribution': distribution,
-                    'para': popt,
-                    'pcov': pcov,
-                    'sse':sse,
-                    'data_pdf':data_pdf,
-                    'xdata': xdata,
-                    'ydata': ydata,
-                    'fit_pdf':fit_pdf}
-        self.summary.append(fit_info)
-
-        print('------------ 拟合分布 %s -------------' % fit_distribution)
-        print('- - Optimal Parameters : ',popt)
-        print('-Estimated Covariance : ',pcov)
-        return fit_info
-
+        return res
 
     def fit(self,distribution,data=None,x_max=None,x_min=None):
-
-        if distribution in FitModel.STATS_DIST:
-            fit_distribution = getattr(stats,distribution)
-        else:
-            print('- - scipy.satas 未定义改分布 - - ')
+        '''
+        :param distribution: 分布的名称，根据scipy提供的连续随机变量确定:
+            见https://docs.scipy.org/doc/scipy/reference/stats.html#univariate-and-multivariate-kernel-density-estimation-scipy-stats-kde
+        :param data: 拟合使用的数据
+        :param x_max: 拟合部分的上界
+        :param x_min:拟合部分的下界
+        :return: 拟合结果字典
+        '''
+        try:
+            fit_dist = getattr(stats,distribution)
+        except AttributeError as e:
+            print('- - scipy.satas 不存在分布 - - ', distribution)
             return None
 
         if data is None and self.origin_data is not None:
             data = self.origin_data
 
         if x_max is not None:
-            data = data[data.index < x_max]
+            data = data[data < x_max]
 
         if x_min is not None:
-            data = data[data.index > x_min]
+            data = data[data > x_min]
 
-        # 开始拟合 --------------------
-        print('------------ 拟合分布 %s -------------' % fit_distribution)
-        para = fit_distribution.fit(data,floc=0)
+        print('------------ 拟合分布 %s -------------' % fit_dist)
+        para = fit_dist.fit(data,floc=0)
         arg = para[:-2]
         loc = para[-2]
         scale = para[-1]
-        data_pdf = FitModel.distribution_pdf(data)
 
+        data_pdf = FitModel.distribution_pdf(data)
         xdata = data_pdf.index.values
         ydata = data_pdf.values
 
-        fit_pdf = fit_distribution.pdf(xdata,*arg,loc=loc,scale=scale)
-        sse = np.sum(np.power(data_pdf.values - fit_pdf, 2.0))
+        y_fit = fit_dist.pdf(xdata,*arg,loc=loc,scale=scale)
+        r2 = self.r2(ydata,y_fit)
 
-        fit_info = {'method':'stats',
-                    'distribution': distribution,
-                    'para': para,
-                    'pcov': sse,
-                    'sse':sse,
-                    'data_pdf': data_pdf,
-                    'xdata': xdata,
-                    'ydata': ydata,
-                    'fit_pdf':fit_pdf}
-        self.summary.append(fit_info)
+        res = {'method':'stats',
+               'dist_name': distribution,
+                'fit_dist':fit_dist,
+                'para': para,
+                'pcov': [],
+                'r2':r2,
+                'data_pdf': data_pdf,
+                'xdata': xdata,
+                'ydata': ydata,
+                'ydata_fit':y_fit}
+        self.summary.append(res)
+        print('- - para - - ',para)
+        print('- -  r2  - - ', r2)
+        return res
 
 
     def plot_model(self,log_log=True,style=0, mfrow=None):
@@ -281,12 +329,13 @@ class FitModel():
             ax.plot(self.data_pdf.index.values, self.data_pdf.values, 'k+')
             for model in self.summary:
                 xdata = model.get('xdata')
-                para = model.get('para')
-                distribution = model.get('distribution')
-                ydata = model.get('fit_pdf')
-                ax.plot(xdata, ydata, label=distribution)
+                ydata_fit = model.get('ydata_fit')
+                distribution = model.get('dist_name')
+                r2 = model.get('r2')
+                legend_label = distribution + ' r2: '+ str(r2)
+                ax.plot(xdata, ydata_fit, label=legend_label)
                 ax.legend()
-            ax.set_ylabel('Pr')
+            ax.set_ylabel('Prob')
             if log_log:
                 ax.set_yscale('log')
                 ax.set_xscale('log')
@@ -305,24 +354,19 @@ class FitModel():
             axes = []
             for i, model in enumerate(self.summary):
                 axes.append(fig.add_subplot(mfrow[0], mfrow[1], i + 1))
-                xdata = model.get('xdata')
-                para = model.get('para')
-                distribution = model.get('distribution')
-                ydata = model.get('fit_pdf')
-
-                fit_distribution = getattr(eval(model.get('method')),distribution)
-                print(para)
-                arg = para[:-2]
-                loc = para[-2]
-                scale = para[-1]
-                ydata_2 = fit_distribution.pdf(xdata,*arg,loc=loc,scale=scale)
 
                 axes[i].plot(self.data_pdf.index.values, self.data_pdf.values, 'k+')
-                axes[i].plot(xdata, ydata, label=distribution)
-                axes[i].plot(xdata,ydata_2,label='Fit')
+
+                xdata = model.get('xdata')
+                ydata_fit = model.get('ydata_fit')
+
+                distribution = model.get('dist_name')
+                r2 = model.get('r2')
+                legend_label = distribution + ' r2: ' + str(r2)
+                axes[i].plot(xdata, ydata_fit, label=legend_label)
 
                 axes[i].legend()
-                axes[i].set_ylabel('Pr')
+                axes[i].set_ylabel('Prob')
                 if log_log:
                     axes[i].set_yscale('log')
                     axes[i].set_xscale('log')
@@ -343,17 +387,28 @@ def test():
 
 
 def test_model():
+    import os
+    # 读取数据
     DataDir = r'G:\data'
-    path_dis = DataDir + '\\DistanceAC.csv'
+    path_dis = os.path.join(DataDir,'DistanceAC.csv')
     data = pd.read_csv(path_dis, header=0)
     data = data['DistanceAC']
     data = data[data > 0]
-    # -----------------------------------------------
+
+    # 数据拟合
     model = FitModel(data=data)
     model.fit(distribution='expon', x_max=8)
     model.fit(distribution='lognorm')
     model.fit(distribution='gamma')
     model.plot_model(style=1)
+
+    # 保存模型
+    save_path = os.path.join(DataDir,'model.json')
+    FitModel.save_model(model,save_path)
+
+    # 读取已经保存的模型
+    model_2 = FitModel.load_model(save_path)
+    model_2.plot_model()
 
 if __name__ == '__main__':
     test_model()
