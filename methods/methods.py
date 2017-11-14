@@ -45,13 +45,18 @@ def read_csv(readpath):
     read_d = pd.concat(chunks,ignore_index=True)
     return read_d
 
-def get_filename(dir, filetype='.csv'):
+def get_filename(dir,filetype='.csv',return_type='name'):
     #返回某个目录下所有后缀为指定类型的文件名的list，不包含后缀
-    filelist = []
+    files = []
     for filename in os.listdir(dir):
         if os.path.splitext(filename)[1] == filetype:
-            filelist.append(os.path.splitext(filename)[0])
-    return filelist
+            files.append(os.path.splitext(filename)[0])
+    if return_type == 'name':
+        return files
+    elif return_type == 'all':
+        files = [os.path.join(dir,each+filetype) for each in files]
+        return files
+    return files
 
 def connect_file(dir, connect_nums=None, filetype='.csv',header = 0):
     '''
@@ -145,36 +150,45 @@ def dataframe_slice_by_timestamp(df,filter_dict):
     df = df.ix[ind_return,:]
     return df
 
-def distribution(data):
+def distribution_fre(data):
     '''
-    计算数据的概率密度分布
-    :param data: list 或者 pandas.Series.
-    :return: pandas.Series
-    '''
-    if not isinstance(data,pd.Series):
+        计算数据的频率密度分布,最后的概率值加起来都等于1
+        :param data: list 或者 pandas.Series.
+        :return: pandas.Series
+        '''
+    if data is None:
+        return None
+    if not isinstance(data, pd.Series):
         data = pd.Series(data)
     data_count = data.value_counts().sort_index()
-    data_p = data_count/data_count.sum()
+    data_p = data_count / data_count.sum()
     return data_p
 
-def distribution_cp(data):
+def distribution_pdf(data, bins=None):
     '''
-    计算累计概率密度分布
-    :param data: list 或者 Series
-    :return: pandas's Series
+    用频率密度直方图来估计概率密度分布
+    :param data: 数据
+    :return: data_pdf，pandas.Series
     '''
-    if not isinstance(data,pd.Series):
-        data = pd.Series(data)
-    data_count = data.value_counts().sort_index()
-    data_fre = data_count/data_count.sum()
-    origin_index = data_fre.index.values
-    data_fre.index = range(len(data_fre))
-    data_cp = data_fre.copy()
-    #分布函数，X < x
-    for i in range(len(data_fre)):
-        data_cp[i] = sum(data_fre[:i])
-    data_cp.index = origin_index
-    return data_cp
+    if data is None:
+        return None
+
+    if bins is None:
+        bins = 512
+    density, xdata = np.histogram(data, bins=bins, density=True)
+    xdata = (xdata + np.roll(xdata, -1))[:-1] / 2.0
+    data_pdf = pd.Series(density, index=xdata)
+    return data_pdf
+
+def distribution_cdf(data, bins=None):
+    pdf = distribution_pdf(data, bins)
+    cdf = []
+    for ind in pdf.index:
+        cdf.append(pdf[ind:].sum())
+
+    cdf = pd.Series(cdf, index=pdf.index)
+
+    return cdf
 
 def plot_distribution(data, subplot=2, data_norm=False, cmp=False, grid=True):
     '''
@@ -187,41 +201,40 @@ def plot_distribution(data, subplot=2, data_norm=False, cmp=False, grid=True):
     '''
 
     if data_norm:
-        data_normed = normlize(data.values, 0, 1)
-        name = 'Normlized' + str(data.name)
-        data = pd.Series(data_normed, name=name)
+        data_normed = normlize(data.values,0,1)
+        name = 'Normlized'+ str(data.name)
+        data = pd.Series(data_normed,name=name)
 
     ylabel = 'Probability'
 
     if cmp:
-        data = distribution_cp(data)
+        data = distribution_cdf(data)
         ylabel = 'Cumulative ' + ylabel
     else:
-        data = distribution(data)
+        data = distribution_pdf(data)
 
     fg = plt.figure()
     ax1 = []
     for i in range(subplot):
-        ax1.append(fg.add_subplot(1, subplot, i + 1))
+        ax1.append(fg.add_subplot(1,subplot,i+1))
 
     data.plot(ax=ax1[0], style='*-')
     ax1[0].set_title('Distribution')
 
-    if subplot >= 2:
+    if subplot>=2:
         data.plot(ax=ax1[1], style='*', logy=True, logx=True)
         ax1[1].set_title('log-log')
-        # ax1[1].set_xlim([0, 50])
+        #ax1[1].set_xlim([0, 50])
 
-    if subplot >= 3:
+    if subplot>=3:
         data.plot(ax=ax1[2], style='*-', logy=True)
         ax1[2].set_title('semi-log')
 
     for i in range(subplot):
         ax1[i].set_ylabel(ylabel)
         ax1[i].set_xlabel(data.name)
-        ax1[i].set_xlim([0, max(data.index) * 1.1])
+        ax1[i].set_xlim([0, max(data.index)*1.1])
         ax1[i].grid(grid, alpha=0.8)
-
 
 def normlize(data,lower=0,upper=1):
     '''
