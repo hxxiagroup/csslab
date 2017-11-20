@@ -2,7 +2,7 @@
 简介：
     对数据的分布进行拟合
     即，概率密度函数符合哪种分布！！！ 并不是曲线拟合！！
-        基于scipy中的stats和otimize两种方法
+    通过 *scipy.stats* 和 *powerlaw包* 来实现
 
 方法：
     分布拟合 - FitModel.fit - 基于scipy.stats的连续随机变量的拟合方法
@@ -16,31 +16,30 @@
 
 备注：
     * 2017.10.27
-        目前只是数据的分布进行拟合，后面可以再扩展成曲线的拟合较好
-        支持的分布需要继续增加
+        目前只是数据的分布进行拟合，支持的分布需要继续增加
+
     * 2017.10.30
-        拓展曲线拟合，使用Fitmodel(data_pdf)，用data_pdf代替拟合的数据，就是曲线的拟合了。
+        拓展曲线拟合，使用Fitmodel(data_pdf)，并不需要曲线拟合功能。
 
     * 2017.11.1 - 重要
         修复严重错误，关于概率密度的计算，原来采用频率来作为概率
         目前改为np.histgram方法来计算密度
             第二中方法跟R语言中的density方法给出的结果一致，（也是张凌师兄的计算方法）
-
         第二，采用optimize.curfit方法得到的最优解，跟R语言中的fitdistplus包的结果差别较大
             发现scipy中有更好的曲线拟合方法，scipy.stats中的fit方法,好像数据过大，拟合时间较长
             接下来考虑用scipy.stats中分分布的拟合方法来做
                 -存在的一个问题是，stats中所有的分布都采用统一的形式，对于分布的都采用loc,scale来控制，这可能也比较难理解
     * 2017.11.7
-        修改了拟合结果
-        增加了r2的计算
+        修改了拟合结果,增加了r2的计算
         - - 应该提供保存拟合模型的方法和追加拟合好模型的方法，这样就不用重复拟合工作了
              save_model
              load_model
-    * 2017.11.14目前基本的分布拟合基本可用，但是对于powerlaw的拟合请使用fit2，
-        并且对于尾部的开始的xmin可以使用powerlaw包来确定
-        或者干脆用powerlaw包来拟合尾部
-        经过对比fit2中采用powerlaw包确定的xmin来拟合 powerlaw分布，结果和该包的结果差不多
-        -- 见example
+
+    * 2017.11.14
+        目前基本的分布拟合基本可用,并且支持powerlaw的拟合!
+
+    * 2017.11.20
+        目前支持拟合的loglik 和 AIC值的计算了，可以在model中调用!
 
 '''
 
@@ -96,10 +95,14 @@ class FitModel():
                'x_max':拟合用的x_max.
                 'pcov': 拟合的方差.
                 'r2': R方.
+                'LogLik':Log(似然函数值)
+                ‘AIC’:拟合模型的AIC值
                 'data_pdf': 数据的pdf.
                 'xdata': PDF数据的x.
-                'ydata': pdf数据的y，即density.
-                'ydata_fit': 拟合出来的ydata.}
+                'ydata': PDF数据的y，即density.
+                'ydata_fit': 拟合出来的ydata.
+                'xdata_plot':用于绘制拟合模型的xdata
+                'ydata_plot':用于绘制模型拟合的ydata}
           '''
 
         self.origin_data = data
@@ -109,8 +112,6 @@ class FitModel():
         else:
             self.data_pdf = data_pdf
         self.summary = []
-
-
 
 
     @staticmethod
@@ -209,6 +210,28 @@ class FitModel():
             model = pickle.load(f)
         return model
 
+    def remove_fitting(self,dist_name):
+        '''
+        去掉拟合结果中某个fitting结果
+        :param dist_name:
+        :return:
+        '''
+        summary2 = self.summary[:]
+        model_i = None
+        for i,each in enumerate(self.summary):
+            fitting_dist = each.get('dist_name')
+            if fitting_dist == dist_name:
+                model_i = each
+                summary2.pop(i)
+                break
+        if len(summary2) < len(self.summary):
+            print('- - 删除拟合记录 %s - - ' % dist_name)
+        else:
+            print('- - 没有拟合记录 %s - -' % dist_name)
+        self.summary = summary2
+
+        return model_i
+
     def r2(self,y,y_fit):
         from sklearn.metrics import r2_score
         '''
@@ -216,7 +239,7 @@ class FitModel():
         r2 = 1 - sse/sst
         '''
         r2 = r2_score(y,y_fit)
-        return round(r2,4)
+        return round(r2,3)
 
     def calculate_r2(self,y,y_fit):
         y = np.asarray(y)
@@ -227,7 +250,8 @@ class FitModel():
         r2 = 1 - sse/sst
         return round(r2,4)
 
-    def fit2(self, distribution, data=None, data_pdf=None, x_max=None, x_min=None,initial_para=None,**kwargs):
+    def fit2(self, distribution, data=None, data_pdf=None,
+             x_max=None, x_min=None, initial_para=None, **kwargs):
         '''
         对数据的概率密度分布进行拟合。
         拟合的信息会保存成Dict
@@ -257,7 +281,6 @@ class FitModel():
                 if bins is None:
                     bins = self.bins
                 data_pdf = FitModel.distribution_pdf(data,bins)
-
                 if data_pdf is None:
                     print('Error: Data is None')
                     return None
@@ -266,11 +289,16 @@ class FitModel():
         else:
             self.data_pdf = data_pdf
 
+        if data is None and self.origin_data is not None:
+            data = self.origin_data
+
         if x_max is not None:
             data_pdf = data_pdf[data_pdf.index < x_max]
+            data = data[data<x_max]
 
         if x_min is not None:
             data_pdf = data_pdf[data_pdf.index > x_min]
+            data = data[data > x_min]
 
         xdata = np.asarray(data_pdf.index.values)
         ydata = np.asarray(data_pdf.values)
@@ -283,9 +311,17 @@ class FitModel():
 
         print('------------ 拟合分布 %s -------------' % fit_dist)
         para, pcov = optimize.curve_fit(fit_dist, xdata, ydata, p0=initial_para)
-        y_fit = fit_dist(xdata,*para)
 
-        r2 = self.calculate_r2(ydata,y_fit)
+        LogLik = np.sum(np.log(fit_dist(data.values, *para)))
+        AIC = 2 * len(para) - 2*LogLik
+
+        ydata_fit = fit_dist(xdata,*para)
+        r2 = self.calculate_r2(ydata,ydata_fit)
+
+        plot_xmin = x_min if  x_min else data.min()
+        plot_xmax = x_max if x_max else data.max()
+        xdata_plot = np.linspace(plot_xmin, plot_xmax, 1000)
+        ydata_plot = fit_dist(xdata_plot, *para)
 
         res = {'method': 'FitModel',
                 'dist_name': distribution,
@@ -295,16 +331,21 @@ class FitModel():
                'x_max':x_max,
                 'pcov': pcov,
                 'r2': r2,
+               'LogLik': LogLik,
+               'AIC': AIC,
                 'data_pdf': data_pdf,
                 'xdata': xdata,
                 'ydata': ydata,
-                'ydata_fit': y_fit}
+                'ydata_fit': ydata_fit,
+               'xdata_plot': xdata_plot,
+               'ydata_plot': ydata_plot
+               }
         self.summary.append(res)
         print('- - para - - ',para)
         print('- - r2 - - ', r2)
         return res
 
-    def fit(self,distribution,data=None,x_max=None,x_min=None,**kwargs):
+    def fit(self, distribution, data=None, x_max=None, x_min=None, **kwargs):
         '''
         :param distribution: 分布的名称，根据scipy提供的连续随机变量确定:
             见https://docs.scipy.org/doc/scipy/reference/stats.html#univariate-and-multivariate-kernel-density-estimation-scipy-stats-kde
@@ -334,6 +375,9 @@ class FitModel():
         loc = para[-2]
         scale = para[-1]
 
+        LogLik = np.sum(fit_dist.logpdf(data, *para[:-2], para[-2], para[-1]))
+        AIC = 2 * len(para) - 2*LogLik
+
         bins = kwargs.get('bins',None)
         if bins is None:
             bins = self.bins
@@ -344,6 +388,11 @@ class FitModel():
         y_fit = fit_dist.pdf(xdata,*arg,loc=loc,scale=scale)
         r2 = self.calculate_r2(ydata,y_fit)
 
+        plot_xmin = x_min if x_min else data.min()
+        plot_xmax = x_max if x_max else data.max()
+        xdata_plot = np.linspace(plot_xmin, plot_xmax, 1000)
+        ydata_plot = fit_dist.pdf(xdata_plot,*arg,loc=loc,scale=scale)
+
         res = {'method':'stats',
                'dist_name': distribution,
                 'fit_dist':fit_dist,
@@ -352,40 +401,126 @@ class FitModel():
                 'para': para,
                 'pcov': [],
                 'r2':r2,
+               'LogLik': LogLik,
+               'AIC':AIC,
                 'data_pdf': data_pdf,
                 'xdata': xdata,
                 'ydata': ydata,
-                'ydata_fit':y_fit}
+                'ydata_fit':y_fit,
+               'xdata_plot': xdata_plot,
+               'ydata_plot': ydata_plot}
+
         self.summary.append(res)
         print('- - para - - ',para)
         print('- -  r2  - - ', r2)
         return res
 
-    def plot_model(self,log_log=True,style=0, mfrow=None,**kwargs):
+    def fit_powerlaw(self,data=None,x_min=None,x_max=None,use_powerlaw=True,
+                     dist_name='powerlaw_nm',**kwargs):
         '''
-        :param log_log: 是否为log_log
-        :param style: 绘制的风格
-            0 - 所有拟合绘制在一起
-            1 - 拟合结果分多个ax绘制
-        :param mfrow: 图片分割方式，如果style为1的话，可以指定
-        :return:
+        主要用powerlaw包来完成对powerlaw的拟合，不指定x_min的话，powerlaw包会找到最佳的x_min
+        :param data: pandas.Series数据
+        :param x_min: 数据的下界
+        :param x_max: 数据的上界
+        :param use_powerlaw: 是否使用powerlaw包，否则使用fit2的方法
+        :param dist_name: 用来指定此次的拟合名称，方便之后调用，默认为powerlaw_nm（以和powerlaw区分）
+        :param kwargs: 其他参数
+        :return: 拟合结果的字典
+        '''
+        if data is None and self.origin_data is not None:
+            data = self.origin_data
+
+        if use_powerlaw:
+            import powerlaw
+            print('- - 使用powerlaw包拟合 - - ')
+            model = powerlaw.Fit(data=data.values,xmin=x_min,xmax=x_max)
+            XMIN = model.power_law.xmin
+            alpha = model.power_law.alpha
+            x_min = XMIN
+            para = (XMIN,alpha)
+
+            if x_max is not None:
+                data = data[data<x_max]
+
+            data = data[data>XMIN]
+
+            LogLik = np.sum(np.log(FitModel.powerlaw_normlized(data.values, *para)))
+            AIC = 2 * len(para) - 2 * LogLik
+
+
+            bins = kwargs.get('bins')
+            data_pdf = FitModel.distribution_pdf(data,bins=bins)
+            xdata = data_pdf.index.values
+            ydata = data_pdf.values
+
+            ydata_fit = FitModel.powerlaw_normlized(xdata,*para)
+            r2 = self.calculate_r2(ydata,ydata_fit)
+
+            plot_xmin = x_min if x_min else data.min()
+            plot_xmax = x_max if x_max else data.max()
+            xdata_plot = np.linspace(plot_xmin, plot_xmax, 1000)
+            ydata_plot= FitModel.powerlaw_normlized(xdata_plot, *para)
+
+            res = {'method': 'FitModel',
+                   'dist_name': dist_name,
+                   'fit_dist': FitModel.powerlaw_normlized,
+                   'para': para,
+                   'x_min': x_min,
+                   'x_max': x_max,
+                   'pcov': [],
+                   'r2': r2,
+                   'LogLik': LogLik,
+                   'AIC': AIC,
+                   'data_pdf': data_pdf,
+                   'xdata': xdata,
+                   'ydata': ydata,
+                   'ydata_fit': ydata_fit,
+                   'xdata_plot':xdata_plot,
+                   'ydata_plot':ydata_plot}
+
+            self.summary.append(res)
+            print('- - para - - ', para)
+            print('- - r2 - - ', r2)
+            return res
+        else:
+            self.fit2('powerlaw',data,x_max=x_max,x_min=x_min,**kwargs)
+
+    def plot_model(self,style=0,axes=None,log_log=True,
+                   mfrow=None,plot_origindata=True,**kwargs):
+        '''
+
+        :param style: 绘制风格
+        :param axes: ax对象
+        :param log_log: 是否为log-log
+        :param mfrow: 图像分割,只在style为1时使用
+        :param plot_origindata: 是否绘制原数据的数据
+        :param kwargs:
+        :return: fig,ax 或 ax
         '''
         if len(self.summary) < 1:
             print('- - 模型还没有拟合 - - ')
             return None
 
-        fig = plt.figure()
         if style == 0:
-            ax = fig.add_subplot(1, 1, 1)
-            ax.plot(self.data_pdf.index.values, self.data_pdf.values, 'k+')
+            if axes is None:
+                fig = plt.figure()
+                ax = fig.add_subplot(1, 1, 1)
+            else:
+                ax = axes
             for model in self.summary:
-                xdata = model.get('xdata')
-                ydata_fit = model.get('ydata_fit')
+                xdata_plot = model.get('xdata_plot')
+                ydata_fit = model.get('ydata_plot')
                 distribution = model.get('dist_name')
                 r2 = model.get('r2')
-                legend_label = distribution + ' r2: '+ str(r2)
-                ax.plot(xdata, ydata_fit, label=legend_label)
+                legend_label = distribution + ' (r2: %.3f)'%r2
+                ax.plot(xdata_plot, ydata_fit, label=legend_label)
                 ax.legend()
+            if plot_origindata:
+                ax.plot(self.data_pdf.index.values, self.data_pdf.values,
+                           linestyle='', marker='o', mfc='#2E68AA', mec='#2E68AA')
+            else:
+                ax.plot(xdata_plot, model.get('ydata_plot'), linestyle='', marker='o',
+                           mfc='#2E68AA', mec='#2E68AA')
             ax.set_ylabel('Prob')
             if log_log:
                 ax.set_yscale('log')
@@ -394,7 +529,6 @@ class FitModel():
                 ax.set_xlim(kwargs.get('xlim'))
             if 'ylim' in kwargs.keys():
                 ax.set_ylim(kwargs.get('ylim'))
-
 
         if style == 1:
             model_num = len(self.summary)
@@ -407,34 +541,39 @@ class FitModel():
                 else:
                     mfrow = (3, 3)
             # 开始绘制每一个ax
-            axes = []
+            if axes is None:
+                fig = plt.figure()
+                ax = [fig.add_subplot(mfrow[0], mfrow[1], i + 1) for i in len(self.summary)]
+            else:
+                ax = axes
             for i, model in enumerate(self.summary):
-                axes.append(fig.add_subplot(mfrow[0], mfrow[1], i + 1))
-                axes[i].plot(self.data_pdf.index.values, self.data_pdf.values, 'k+')
-
-                xdata = model.get('xdata')
-                ydata_fit = model.get('ydata_fit')
+                xdata_plot = model.get('xdata_plot')
+                ydata_fit = model.get('ydata_plot')
 
                 distribution = model.get('dist_name')
                 r2 = model.get('r2')
-                legend_label = distribution + ' r2: ' + str(r2)
-                axes[i].plot(xdata, ydata_fit, label=legend_label)
-                # ydata = model.get('ydata')
-                # axes[i].plot(xdata, ydata, 'b+')
-
-                axes[i].legend()
-                axes[i].set_ylabel('Prob')
+                legend_label = distribution +' (r2: %.3f)' % r2
+                ax[i].plot(xdata_plot, ydata_fit, label=legend_label)
+                if plot_origindata:
+                    ax[i].plot(self.data_pdf.index.values, self.data_pdf.values,
+                               linestyle='',marker='o',mfc='',mec='#2E68AA')
+                else:
+                    ax[i].plot(xdata_plot, model.get('ydata_plot'), linestyle='',marker='o',
+                     mfc='#2E68AA',mec='#2E68AA')
+                ax[i].legend()
+                ax[i].set_ylabel('Prob')
                 if log_log:
-                    axes[i].set_yscale('log')
-                    axes[i].set_xscale('log')
+                    ax[i].set_yscale('log')
+                    ax[i].set_xscale('log')
                 if 'xlim' in kwargs.keys():
-                    axes[i].set_xlim(kwargs.get('xlim'))
+                    ax[i].set_xlim(kwargs.get('xlim'))
                 if 'ylim' in kwargs.keys():
-                    axes[i].set_ylim(kwargs.get('ylim'))
+                    ax[i].set_ylim(kwargs.get('ylim'))
 
-        # plt.show()
-        return fig
-
+        if not axes :
+            return fig,ax
+        else:
+            return ax
 
 
 def example_fitting():
@@ -456,10 +595,27 @@ def example_fitting():
     FitModel.save_model(model,save_path)
     # 读取已经保存的模型
     model_2 = FitModel.load_model(save_path)
-    model_2.plot_model()
+    for each in model.summary:
+        print('-------------------------------------------')
+        print(' -dist- ', each['dist_name'], ' -x_min- ', each['x_min'])
+        print(' -para- ', each['para'], ' -r2- ', each['r2'])
+        print(' -LogLik- ', each['LogLik'], ' -AIC- ', each['AIC'])
+    #去掉powerlaw这个结果，并把结果赋值赋值给model_power
+    #去掉结果(summary)中的结果的原因：
+        #例如想单独绘制这个拟合
+    model_power = model.remove_fitting('powerlaw')
 
-def example_fitting_powerlaw():
+    fig,ax = model_2.plot_model(style=0) #现在就不会绘制powerlaw的结果了
+    #接下来可以在ax中单独绘制powerlaw
+    ax.plot(model_power['xdata_plot'],model_power['ydata_plot'],label='powerlaw')
+    #。。。。
+    plt.show()
+
+
+def compare_fitting_powerlaw():
     '''
+    对比powerlaw的拟合结果的不同
+
     ** 对于powerlaw的拟合，最主要的部分在于确定尾部的开始，即xmin
         方法1时，肉眼观测
         方法2是使用powerlaw包，可以确定最佳的xmin，但是拟合的部分会在原数据的pdf上方（density高一点）
@@ -505,8 +661,16 @@ def example_fitting_powerlaw():
     plt.yscale('log')
     plt.show()
 
+def example_fitting_powerlaw():
+    data = pd.Series()
+    model = FitModel(data=data)
+    res_powerlaw = model.fit_powerlaw()
+    fig,ax = model.plot_model(plot_origindata=False)
+    plt.show()
+
 if __name__ == '__main__':
     example_fitting()
+    # compare_fitting_powerlaw()
     # example_fitting_powerlaw()
 
 
