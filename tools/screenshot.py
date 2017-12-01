@@ -25,6 +25,7 @@ def screenshot(location,image_size,save_path,delay_time=4):
     time.sleep(delay_time)
     box = (location[0], location[1], location[0] + image_size[0], location[1] + image_size[1])
     im = ImageGrab.grab(box)
+    im.show()
     im.save(save_path)
     winsound.PlaySound(SOUND, winsound.SND_FILENAME)
     print('成功截图:',save_path)
