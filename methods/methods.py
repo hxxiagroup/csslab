@@ -45,50 +45,31 @@ def read_csv(readpath):
     read_d = pd.concat(chunks,ignore_index=True)
     return read_d
 
-def get_filename(dir,filetype='.csv',return_type='name'):
-    #返回某个目录下所有后缀为指定类型的文件名的list，不包含后缀
+def get_files(dir,filetype='.csv',complete_path=True):
+    '''
+    :param complete_path: 是否返回完整文件的path，否则返回文件的name(不包含拓展名)
+    :return:
+    '''
+    #返回某个目录下所有后缀为指定类型的文件的list
     files = []
     for filename in os.listdir(dir):
         if os.path.splitext(filename)[1] == filetype:
             files.append(os.path.splitext(filename)[0])
-    if return_type == 'name':
-        return files
-    elif return_type == 'all':
+    if complete_path:
         files = [os.path.join(dir,each+filetype) for each in files]
         return files
-    return files
-
-def connect_file(dir, connect_nums=None, filetype='.csv',header = 0):
-    '''
-    连接某一个目录下的所有数据，可以指定文件数量
-    :param dir: the directory of files
-    :param connect_nums:  需要连接的文件序号，如果为空，则默认为全部文件,例如第1，2，5个。[0,1,4]
-    :param filetype: the type of files you want to get all data from
-    :return: Dataframe of all data
-    '''
-    filelist = get_filename(dir, filetype=filetype)
-    all_data = []
-
-    if connect_nums is None:
-        connect_nums = range(len(filelist))
-    if dir[-1] != '\\':
-        dir = dir + '\\'
-    #序号超出文件数量，还有其他很多情况，学学try的用法吧，2017.6.12
-    elif max(connect_nums) > len(filelist) - 1:
-        print('- - Mistake - - Connect num is wrong')
-        return None
-
-    if len(filelist) != 0:
-        for file_id in connect_nums:
-            readpath = dir + filelist[file_id] + filetype
-            #注意有的文件的encoding类型
-            print(' -- connecting file : %s '%readpath)
-            each_data = pd.read_csv(readpath, header=header)
-            all_data.append(each_data)
     else:
-        print('- - - - - No file found - - - - - ')
-        return None
-    return pd.concat(all_data,ignore_index=True)
+        return files
+
+
+def get_subdir(sup_dir):
+    '''放回某个目录下所有当前子目录'''
+    DirList = []
+    for subdir in os.listdir(sup_dir):
+        abs_path = os.path.join(sup_dir,subdir)
+        if os.path.isdir(abs_path):
+            DirList.append(abs_path)
+    return DirList
 
 def random_dataframe_sample(df, num_sample):
     '''

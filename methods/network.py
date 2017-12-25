@@ -296,7 +296,9 @@ class NetworkUnity():
         #创建igraph.Graph类
         if graph is None and edgedata is not None:
             graph = NetworkUnity.get_graph_from_edgedata(edgedata,
-                                                         directed=directed,connected_component=True)
+                                                         attr=use_weight,
+                                                         directed=directed,
+                                                         connected_component=True)
 
         gr = graphistry.bind(source='Source', destination='Target', node='Id', edge_weight='Weight').graph(graph)
         edgedata = NetworkUnity.networkx2pandas(graph)
@@ -338,7 +340,7 @@ class NetworkUnity():
         print('社区发现方法： ',detect_method)
         res_community = eval(detect_method)
         #将社区信息保存到节点信息中
-        ig.vs['modulraity_class'] = res_community.membership
+        ig.vs['modularity_class'] = res_community.membership
         #将节点信息转化为Dataframe表
         edgedata_,nodedata = gr.igraph2pandas(ig)
         modularity = res_community.modularity
@@ -381,6 +383,118 @@ class NetworkUnity():
         else:
             Q = ig.modularity(list(community_data['modularity_class']),weights=list(ig.es[edge_weight]))
         return Q
+
+    @staticmethod
+    def get_confusion_matrix(result_1, result_2, return_df=True):
+        '''
+        计算两个社区划分的混淆矩阵
+
+        :param result_1: 划分结果1，包含[Id，modularity_class]; DataFrame；
+        :param result_2: 划分结果2,形式同result_1; DataFrame
+        :param return_df: 是否返回DataFrame形式
+        :return: confusition matrix based on two classify result
+        '''
+
+        result_1.columns = ['Id', 'modularity_class']
+        result_2.columns = ['Id', 'modularity_class']
+        clusters_1 = pd.unique(result_1['modularity_class'])
+        clusters_2 = pd.unique(result_2['modularity_class'])
+        NUM_1 = len(clusters_1)
+        NUM_2 = len(clusters_2)
+        clusters_1.sort()
+        clusters_2.sort()
+
+        def _get_matrix():
+            for cluster_1 in clusters_1:
+                for cluster_2 in clusters_2:
+                    nodes_1 = result_1.loc[result_1['modularity_class'] == cluster_1, 'Id']
+                    nodes_2 = result_2.loc[result_2['modularity_class'] == cluster_2, 'Id']
+                    union_nodes = np.intersect1d(nodes_1, nodes_2)
+                    yield len(union_nodes)
+
+        matrix = list(_get_matrix())
+        matrix = np.reshape(np.asarray(matrix), newshape=(NUM_1, NUM_2))
+
+        if return_df:
+            matrix = pd.DataFrame(matrix, index=clusters_1, columns=clusters_2)
+
+        return matrix
+
+    @staticmethod
+    def normalized_mutual_info_similarity(confusion_matrix):
+        '''
+        # 计算社区划分的相似度,以及规范化的互信息
+        # Ref. Comparing community structure identification @Leon Danon
+
+
+        结果验证：
+            跟sklearn.metric.normalized_mutual_info_score 的结果一致！！
+            那你写这玩意有啥用！！
+
+        :param confusion_matrix: 混淆矩阵
+        :return: 社区划分的相似度
+        '''
+
+        confusion_matrix = np.asarray(confusion_matrix)
+        NUM_NODES = np.sum(confusion_matrix, axis=None)
+
+        nums_a = np.sum(confusion_matrix, axis=1)  # 按列相加
+        nums_b = np.sum(confusion_matrix, axis=0)  # 按行相加
+        print(np.all(nums_a), np.all(nums_b), NUM_NODES)
+
+        def _cal_entropy(info):
+            print(np.all(info / NUM_NODES))
+            return np.sum(np.multiply(info, np.log(info / NUM_NODES)))
+
+        # 分母计算
+        entropy_a = _cal_entropy(nums_a)
+        entropy_b = _cal_entropy(nums_b)
+        # 分子计算
+        both_info = np.dot(np.asmatrix(nums_a).T, np.asmatrix(nums_b))
+
+        joint_mat = np.multiply(confusion_matrix,
+                                np.log(confusion_matrix / both_info * NUM_NODES + 1e-10))
+        mutual_info = np.sum(joint_mat, axis=None) * (-2)
+
+        similarity = mutual_info / (entropy_a + entropy_b)
+        print('Similarity ： ', similarity)
+
+        return similarity
+
+    @staticmethod
+    def partitial_similarity(labels_true, labels_pred):
+
+        '''既然sklearn里面有这么多评估聚类（划分）的指标，那就都弄过来把
+
+        sklearn地址: http://scikit-learn.org/stable/modules/clustering.html
+
+        常用的一般有
+            adjusted_rand_score
+            normalized_mutual_info_score
+            fowlkes_mallows_score
+
+        '''
+        from sklearn import metrics
+
+        measures = ['adjusted_rand_score',
+                    'normalized_mutual_info_score',
+                    'fowlkes_mallows_score',
+                    'v_measure_score',
+                    'calinski_harabaz_score',
+                    'silhouette_score']
+
+        common_measures = ['adjusted_rand_score',
+                           'normalized_mutual_info_score', ]
+        scores = {}
+
+        for each in common_measures:
+            try:
+                scores[each] = getattr(metrics, each)(labels_true, labels_pred)
+            except (AttributeError, ValueError) as e:
+                print(e)
+
+        scores = pd.Series(scores)
+        return scores
 
 
 # ------------------- examples --------------------------
