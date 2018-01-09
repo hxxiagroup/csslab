@@ -33,7 +33,15 @@
 
     * 2017.10.17 - 增加计算节点特征的方法
 
+    * 2017.12.25 - 增加两种社区划分结果的相似度度量
+
+    * 2018.1.9 - 增加了合并边数据的方法,merge_edgedata!
+
+需要改进：
+    * 将有向图转化为无向图的方法还需要改！
+
 '''
+
 
 import pandas as pd
 import numpy as np
@@ -83,7 +91,7 @@ class NetworkUnity():
         return edgedata
 
     @staticmethod
-    def get_nodes_from_edgedata(edgedata,return_df=True):
+    def nodes_from_edgedata(edgedata,return_df=True):
         '''
         :param edgedata: 边的数据
         :param return_df: 是否返回Series，默认True，否则为list
@@ -97,7 +105,7 @@ class NetworkUnity():
         return nodes
 
     @staticmethod
-    def get_graph_from_edgedata(edgedata, attr='Weight', directed=True,connected_component=False):
+    def graph_from_edgedata(edgedata, attr='Weight', directed=True,connected_component=False):
         '''
         :param edgedata: 边的数据
         :param attr: string 或 list; 边的属性数据，如果没有权重，设置attr=None，
@@ -127,6 +135,105 @@ class NetworkUnity():
 
         print('Directed Graph ：', graph.is_directed())
         return graph
+
+    @staticmethod
+    def merge_edgedata(edgedata_1, edgedata_2, dirceted=True, accumulate_attr='all'):
+        '''
+        合并2个图（edges）,思路如下
+
+        有向边：
+        ------
+            直接用Dataframe的append, 拼接在后面，然后根据重复的边，累加属性值
+
+        无向边：
+        ------
+            图2中的边分为2类：
+                原图（edgedata1）中存在的边:
+                    又分为2类，正向存在的(图1种是3-4 和 图2中是3-4)
+                    反向存在的（如图1中是3-5，图2中5-3）
+                    -- 找到图2中这类边，将反向的边，source和target互换
+                    -- 然后append这些边
+                原图（edgedata1）中不存在的边：
+                    直接append
+        累加属性：
+        --------
+            根据source 和 target 找到重复的数据，然后累加
+
+        :param edgedata_1: Dataframe, 边数据1
+        :param edgedata_2: Dataframe, 边数据2
+        :param dirceted: bool，是否为有向
+        :param accumulate_attr: 需要累加的属性，str 或 list
+        :return: Dataframe，合并以后的数据
+        '''
+
+        def _merge_directed(edgedata1, edgedata2):
+            edgedata_merge = pd.concat([edgedata1, edgedata2],
+                                       axis=0,
+                                       ignore_index=True)
+            return edgedata_merge
+
+        def _merge_undirected(edgedata1, edgedata2):
+            def _add_edge(edgedata_):
+                edgedata = edgedata_.copy()
+                edgedata['Source'] = edgedata['Source'].astype(dtype=str)
+                edgedata['Target'] = edgedata['Target'].astype(dtype=str)
+                edgedata['edges_pd'] = edgedata['Source'] + '-' + edgedata['Target']
+                edgedata['edges_nd'] = edgedata['Target'] + '-' + edgedata['Source']
+                return edgedata
+
+            edgedata1 = _add_edge(edgedata1)
+            edgedata2 = _add_edge(edgedata2)
+
+            # 原edge中已经存在的边
+            idx_pd = edgedata2['edges_pd'].isin(edgedata1['edges_pd'])
+            idx_nd = edgedata2['edges_nd'].isin(edgedata1['edges_pd'])
+            idx_exist = idx_nd | idx_pd
+            idx_new = ~ idx_exist
+
+            # 反向的边先转为正向
+            tmp = edgedata2.loc[idx_nd, 'Target'].copy()
+            edgedata2.loc[idx_nd, 'Target'] = edgedata2.loc[idx_nd, 'Source']
+            edgedata2.loc[idx_nd, 'Source'] = tmp
+
+            edge_exist = edgedata2[idx_exist]
+            edge_new = edgedata2[idx_new]
+
+            # 合并
+            edgedata_merge = edgedata1.append([edge_exist, edge_new],
+                                              ignore_index=True)
+            edgedata_merge = edgedata_merge.drop(['edges_pd', 'edges_nd'],
+                                                 axis=1)
+            return edgedata_merge
+
+        if accumulate_attr == 'all':
+            accumulate_attr = edgedata_1.columns.copy()
+            accumulate_attr = accumulate_attr.drop(['Source', 'Target'])
+        elif isinstance(accumulate_attr, str):
+            accumulate_attr = [accumulate_attr, ]
+
+        # 合并边
+        if dirceted:
+            edgedata_merge = _merge_directed(edgedata_1, edgedata_2)
+        else:
+            edgedata_merge = _merge_undirected(edgedata_1, edgedata_2)
+
+        # 处理属性
+        if len(accumulate_attr) > 0:
+            # ---------------找到重复边-----------------
+            duplicated_last = edgedata_merge[edgedata_merge.duplicated(subset=['Source', 'Target'],
+                                                                       keep='first')].copy()
+            duplicated_first = edgedata_merge[edgedata_merge.duplicated(subset=['Source', 'Target'],
+                                                                        keep='last')].copy()
+            # ----------------累加属性------------------
+            index_first = list(duplicated_first.index)
+            duplicated_last.index = index_first
+
+            edgedata_merge.loc[index_first, accumulate_attr] += duplicated_last[accumulate_attr]
+
+        # ---------------去掉重复边------------------------------
+        edgedata_merge = edgedata_merge.drop_duplicates(subset=['Source', 'Target'])
+
+        return edgedata_merge
 
     @staticmethod
     def calculate_graph_features(graph,centrality=False,save_path=None):
@@ -462,16 +569,16 @@ class NetworkUnity():
         return similarity
 
     @staticmethod
-    def partitial_similarity(labels_true, labels_pred):
+    def partitial_similarity(labels_true, labels_pred,use_common_measure=True):
 
         '''既然sklearn里面有这么多评估聚类（划分）的指标，那就都弄过来把
 
         sklearn地址: http://scikit-learn.org/stable/modules/clustering.html
 
-        常用的一般有
-            adjusted_rand_score
-            normalized_mutual_info_score
-            fowlkes_mallows_score
+        常用度量一般有
+            * normalized_mutual_info_score
+            * adjusted_rand_score
+            * fowlkes_mallows_score
 
         '''
         from sklearn import metrics
@@ -486,8 +593,9 @@ class NetworkUnity():
         common_measures = ['adjusted_rand_score',
                            'normalized_mutual_info_score', ]
         scores = {}
-
-        for each in common_measures:
+        if use_common_measure:
+            measures = common_measures
+        for each in measures:
             try:
                 scores[each] = getattr(metrics, each)(labels_true, labels_pred)
             except (AttributeError, ValueError) as e:
@@ -514,7 +622,7 @@ def main_example():
     print('------------Edgedata------------------')
     print(edgedata)
 
-    graph = NetworkUnity.get_graph_from_edgedata(edgedata,
+    graph = NetworkUnity.graph_from_edgedata(edgedata,
                                                  attr='Weight',
                                                  directed=True,
                                                  connected_component=True)
