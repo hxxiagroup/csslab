@@ -4,18 +4,20 @@
 
 方法：
     ----------功能 ------------ 方法 ---------------
-    * 读取大的数据表(csv) - read_csv
-    * 获取目录下所有某类型的文件名 - get_filename
-    * 读取目录下所有某类型的数据（csv,xlsx） - connect_file
+    * RGB颜色与HEX颜色互转 - hex2rgb 与 rgb2hex
+    * 读取文件较大的csv - read_csv
+    * 获取当前目录下所有子目录 - get_subdirs
+    * 获取当前目录下所有该类型的文件名 - get_files
+    * 获取当前目录和所有子目录下所有该类型的文件名 - get_files_all
     * 数据表随机长度的抽样 - random_dataframe_sample
-    * 数据表根据字段过滤 - dataframe_filter
-    * 数据表根据时间戳过滤 - dataframe_slice_by_timestamp
-    * 计算概率密度分布 - distribution
-    * 计算累计概率密度分布 - distribution_cp
+    * 计算概率密度分布 - distribution_pdf
+    * 计算累计概率密度分布 - distribution_cdf
+    * 计算频率分布 - distribution_fre
     * 数据归一化到某个区间 - normlize
 
 备注：
     * 2017.10.16 - dataframe_filter方法还需要修改
+    * 2018.4.12 - 修改完善，oh yeah!
 
 '''
 
@@ -25,14 +27,48 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-def read_csv(readpath):
+
+def hex2rgb(hexcolor):
     '''
-    分块读取大的csv
+    把十六进制颜色转化为RGB
+
+    如 #6F1958,返回[111, 25, 88]
+
+    :param hexcolor: 以#开头，例如: #6F1958
+    :return: list
+    '''
+    hexcolor = hexcolor[1:] if '#' in hexcolor else hexcolor[:]
+    hexcolor = int('0x' + hexcolor, base=16)
+
+    rgb = [(hexcolor >> 16) & 0xff,
+           (hexcolor >> 8) & 0xff,
+           hexcolor & 0xff]
+    return rgb
+
+def rgb2hex(rgb):
+    '''
+    把RGB颜色转化为十六进制颜色
+    例如：[111, 25, 88] 返回 #6F1958
+
+    :param rgb: list
+    :return: str, hex
+    '''
+    hexcolor = '#'
+    for each in rgb:
+        hex_each = hex(each)[2:].upper()
+        if len(hex_each) < 2:
+            hex_each += '0'
+        hexcolor += hex_each
+    return hexcolor
+
+def read_csv(readpath,**kwargs):
+    '''
+    分块读取大文件的 csv
     :param readpath: filepath
     :return: pd.DataFrame
     '''
     print(' - - start to read - - %s'%readpath)
-    reader = pd.read_csv(readpath,iterator=True)
+    reader = pd.read_csv(readpath,iterator=True,**kwargs)
     loop = True
     chunkSize = 100000
     chunks = []
@@ -42,94 +78,74 @@ def read_csv(readpath):
             chunks.append(chunk)
         except StopIteration:
             loop = False
-    read_d = pd.concat(chunks,ignore_index=True)
-    return read_d
+    data = pd.concat(chunks,ignore_index=True)
+    return data
 
-def get_files(dir,filetype='.csv',complete_path=True):
+def get_files(filedir, filetype='.csv', return_type='abspath'):
     '''
-    :param complete_path: 是否返回完整文件的path，否则返回文件的name(不包含拓展名)
-    :return:
+    返回当前目录下的所有该类型文件名或地址
+
+    :param filedir: str,目录
+    :param filetype: str,文件格式
+    :param return_type: 只是文件名 或 绝对地址
+    :return: list
     '''
-    #返回某个目录下所有后缀为指定类型的文件的list
     files = []
-    for filename in os.listdir(dir):
+    for filename in os.listdir(filedir):
         if os.path.splitext(filename)[1] == filetype:
             files.append(os.path.splitext(filename)[0])
-    if complete_path:
-        files = [os.path.join(dir,each+filetype) for each in files]
+    if return_type == 'name':
         return files
-    else:
+    elif return_type == 'abspath':
+        files = [os.path.join(dir, each + filetype) for each in files]
         return files
+    return files
 
+def get_files_all(filedir,filetype='.csv'):
+    '''
+    返回目录和子目录下所以该类型的文件列表
+    :param filedir: str,目录
+    :param filetype: str,文件格式
+    :return: list
+    '''
+    files = []
+    for each in os.walk(filedir):
+        if len(each[-1]) >= 1:
+            for file_i in each[-1]:
+                if os.path.splitext(file_i)[1] == filetype:
+                    files.append(os.path.join(each[0], file_i))
+    return files
 
 def get_subdir(sup_dir):
-    '''放回某个目录下所有当前子目录'''
-    DirList = []
+    sub_dirs = []
     for subdir in os.listdir(sup_dir):
         abs_path = os.path.join(sup_dir,subdir)
         if os.path.isdir(abs_path):
-            DirList.append(abs_path)
-    return DirList
+            sub_dirs.append(abs_path)
+    return sub_dirs
 
-def random_dataframe_sample(df, num_sample):
+def random_dataframe_sample(df, sample_num):
     '''
-    :param df: DataFrame，数据表
-    :param num_sample: 随机抽样数量
-    :return: DataFrame，抽取的样本数据表
+    返回dataframe的随机数量的样本，不放回。
+
+    如果出现KeyError的话，把下面的 df.ix 改成 df.loc 试试 !
+
+    :param df: Dataframe,数据
+    :param sample_num: 样本数量，也可以是比例，例如 0.2
+    :return: Dataframe
     '''
+    length = len(df)
+
+    if sample_num < 1:
+        sample_num = int(length * sample_num)
+
     inds = list(df.index)
-    if num_sample <= len(df):
-        ind_sample = random.sample(inds, num_sample)
+    if sample_num <= length:
+        ind_sample = random.sample(inds, sample_num)
         df_sample = df.ix[ind_sample, :]
     else:
         df_sample = df
     return df_sample
-
-def dataframe_filter(data, attr, lower = None, upper = None):
-    '''
-    :param data:  pandas.Dataframe obeject.
-    :param attr:  the attribution that you wanna choose for filt
-    :param lower: the lower limit of data
-    :param upper: the upper limit of data
-    :return: pandas.Dataframe after filt
-    '''
-    origin_length = len(data)
-    if lower is not None:
-        data = data[data[attr] >= lower]
-    if upper is not None :
-        data = data[data[attr] <= upper]
-
-    filt_length = len(data)
-    left_rate = round(filt_length/origin_length,3)
-
-    print('- - Filter: ',lower, ' ---- ', upper)
-    print('- - orgin data: %d  - - after filtering: %d  - - %.3f left'
-              %(origin_length,filt_length,left_rate))
-    return data
-
-def dataframe_slice_by_timestamp(df,filter_dict):
-    '''
-    根据时间戳截取DataFrame数据表
-    :param df: DataFrame
-    :param filter_dict: dict, e.g. {'Timestamp':['2008-10-1 10;00:00','2008-10-1 12:00:00'],}
-    :return: DataFrame slice
-    '''
-    ind_all = []
-    for attr,attr_vlaue in filter_dict.items():
-        timedata = df[[attr]].copy()
-        timedata['IndexValue'] = list(timedata.index.values)
-        timedata.index = list(timedata[attr].values)
-        timedata = timedata[attr_vlaue[0]:attr_vlaue[1]]
-        ind_got = timedata['IndexValue']
-        ind_all.append(list(ind_got.values))
-    #get intersection of those index
-    if len(ind_all) > 1:
-        set_ind1 = set(ind_all[0])
-        ind_return = list(set_ind1.intersection(*ind_all[1:]))
-    else:
-        ind_return = ind_all[0]
-    df = df.ix[ind_return,:]
-    return df
 
 def distribution_fre(data):
     '''
@@ -153,9 +169,10 @@ def distribution_pdf(data, bins=None):
     '''
     if data is None:
         return None
-
     if bins is None:
-        bins = 512
+        bins = 200
+    if isinstance(data,pd.Series):
+        data = data.values
     density, xdata = np.histogram(data, bins=bins, density=True)
     xdata = (xdata + np.roll(xdata, -1))[:-1] / 2.0
     data_pdf = pd.Series(density, index=xdata)
@@ -165,10 +182,9 @@ def distribution_cdf(data, bins=None):
     pdf = distribution_pdf(data, bins)
     cdf = []
     for ind in pdf.index:
-        cdf.append(pdf[ind:].sum())
-
+        cdf.append(pdf[:ind].sum())
     cdf = pd.Series(cdf, index=pdf.index)
-
+    cdf = cdf / cdf.max()
     return cdf
 
 def plot_distribution(data, subplot=2, data_norm=False, cmp=False, grid=True):
@@ -186,11 +202,11 @@ def plot_distribution(data, subplot=2, data_norm=False, cmp=False, grid=True):
         name = 'Normlized'+ str(data.name)
         data = pd.Series(data_normed,name=name)
 
-    ylabel = 'Probability'
+    ylabel = 'Prob'
 
     if cmp:
         data = distribution_cdf(data)
-        ylabel = 'Cumulative ' + ylabel
+        ylabel = 'CCDF'
     else:
         data = distribution_pdf(data)
 

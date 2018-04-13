@@ -42,7 +42,6 @@
 
 '''
 
-
 import pandas as pd
 import numpy as np
 import graphistry
@@ -175,10 +174,10 @@ class NetworkUnity():
         def _merge_undirected(edgedata1, edgedata2):
             def _add_edge(edgedata_):
                 edgedata = edgedata_.copy()
-                edgedata['Source'] = edgedata['Source'].astype(dtype=str)
-                edgedata['Target'] = edgedata['Target'].astype(dtype=str)
-                edgedata['edges_pd'] = edgedata['Source'] + '-' + edgedata['Target']
-                edgedata['edges_nd'] = edgedata['Target'] + '-' + edgedata['Source']
+                source_str = edgedata['Source'].astype(dtype=str)
+                target_str = edgedata['Target'].astype(dtype=str)
+                edgedata['edges_pd'] = source_str + '-' + target_str
+                edgedata['edges_nd'] = target_str + '-' + source_str
                 return edgedata
 
             edgedata1 = _add_edge(edgedata1)
