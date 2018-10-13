@@ -9,11 +9,13 @@
     * 从边数据生成网络 - get_graph_from_edgedata
     * 从边数据获取节点 - get_nodes_from_edgedata
     * 将有向边转化为无向边 - as_undirected_edgedata
+    * 合并两个网络 - merge_edgedata
     * 计算网络的特征 - calculate_graph_features
     * 计算节点的特征 - calculate_node_features
     * 根据度来过滤网络 - degree_filter
     * 计算模块度 - modularity
     * 社区发现 - community_detect
+    * 社区结构的相似度度量 - partition_similarity
     * 绘制网络 - draw_graph
 
 主要数据：
@@ -568,7 +570,7 @@ class NetworkUnity():
         return similarity
 
     @staticmethod
-    def partitial_similarity(labels_true, labels_pred,use_common_measure=True):
+    def partitiion_similarity(labels_true, labels_pred,use_common_measure=True):
 
         '''既然sklearn里面有这么多评估聚类（划分）的指标，那就都弄过来把
 

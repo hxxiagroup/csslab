@@ -1,19 +1,28 @@
 # csslab
 
-A platform for method share and cooperation.
-
-- Data analysis
-- Visualization
-- Simulation
-- Complex Network analysis
-- Examples for software \ application
+---
 
 ## Contributing makes team growing
 
-每个人都可以是项目的参与者:
-- 帮助完善，改进
-- 提出新的想法
-- 有什么需要解决的问题？完全可以发起issue
-- 对于涉及重要工作内容，数据等敏感信息，请不要传上来
+每个人都是项目的参与者:
 
-By Complex Society System Group of DUT
+- 通用性的方法
+
+- 帮助完善，改进
+- 新的想法
+- 亟需解决的问题
+- 涉及 unpublished 工作内容，数据等内容，请勿上传
+
+---
+
+内容不限于下面几个方面:
+
+- 数据分析的方法
+- 可视化
+- 模型，模拟
+- 网络分析
+- 软件的使用教程，例子。
+
+---
+
+-- By Complex Society System Group of DUT, 2017 ~

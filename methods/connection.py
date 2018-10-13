@@ -2,7 +2,7 @@ import pymysql
 
 '''
 简介：
-    提供丛数据库数据获取相应数据的支持，可以看成是Partly ORM(Object Relational Mapper).
+    提供丛数据库数据获取相应数据的支持
 
     * DB-API，Python对于各种数据库的支持，数据库接口/适配器，例如pymysql,MySQLdb。
     * ORM 相对于DB-API来说更多的考虑是对象，而不是数据库的SQL语句。
@@ -11,7 +11,7 @@ import pymysql
         * SQLAlchemy
         * SQLObject(gitbub) - http://www.sqlobject.org/SQLObject.html
 
-    本方法并非是要做成ORM，而是提供从数据库获取数据，处理数据的一些方法，从而不用花更多的心思在SQL的学习上。
+    本方法提供从数据库获取数据，处理数据的一些方法，从而不用花更多的心思在SQL的学习上。
 
 方法：
     * 连接数据库 - 创建Connection实例
@@ -19,7 +19,7 @@ import pymysql
     * 获取数据表字段 - get_column
 
 备注：
-    * 目前只支持sql server数据库的数据获取操作，将来最好可以扩展一些常用的数据库
+    * 具体支持的数据库，参考pymysql
     * 需要数据库相关的功能补充
 
 '''
