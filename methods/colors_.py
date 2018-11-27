@@ -1,4 +1,3 @@
-
 '''
 颜色支持
 
@@ -6,7 +5,6 @@
 - common_color 是一些常用的离散颜色
 
 使用方法
-    from colors import color_scheme, common_color
 
 具体的颜色可以参考下面网站
     https://matplotlib.org/examples/color/colormaps_reference.html
@@ -16,9 +14,8 @@ datas文件下有color_scheme数据的json版本
 
 '''
 
-# import numpy as np
 
-color_scheme = {
+ColorScheme = {
 'Accent_03' : ['#7fc97f', '#beaed4', '#fdc086'] ,
 'Accent_04' : ['#7fc97f', '#beaed4', '#fdc086', '#ffff99'] ,
 'Accent_05' : ['#7fc97f', '#beaed4', '#fdc086', '#ffff99', '#386cb0'] ,
@@ -287,6 +284,7 @@ color_scheme = {
 }
 
 
+
 '''
 -------------------------------------------
 常用的color集合
@@ -294,30 +292,69 @@ color_scheme = {
 前12个是Paired_12, 再Pastel1_08，再Dark2_08
 '''
 
-color_names = ['Paired_12','Pastel1_08','Dark2_08','GnBu_09']
 
 def create_colorset(color_names):
     color_set2 = []
     for each in color_names:
-        if  each in color_scheme.keys():
-            color_temp = [color for color in color_scheme[each] if color not in color_set2]
+        if  each in ColorScheme.keys():
+            color_temp = [color for color in ColorScheme[each] if color not in color_set2]
             color_set2.extend(color_temp)
     return color_set2
 
-# colorset = create_colorset()
+color_names = ['Paired_12','Pastel1_08','Dark2_08','GnBu_09']
+# ColorSet = create_colorset()
 
-common_color = ['#33a02c', '#fb9a99','#e31a1c', '#fdbf6f', '#ff7f00',
-                '#cab2d6', '#6a3d9a','#a6cee3', '#1f78b4', '#b2df8a',
-                '#ffff99', '#b15928', '#fbb4ae', '#b3cde3', '#ccebc5',
-                '#decbe4', '#fed9a6', '#ffffcc', '#e5d8bd', '#fddaec',
-                '#f2f2f2', '#1b9e77', '#d95f02', '#7570b3', '#e7298a',
-                '#66a61e', '#e6ab02', '#a6761d', '#666666', '#f7fcf0',
-                '#e0f3db', '#a8ddb5', '#7bccc4', '#4eb3d3', '#2b8cbe',
-                '#0868ac', '#084081']
+ColorSet = ['#33a02c', '#fb9a99','#e31a1c', '#fdbf6f', '#ff7f00',
+            '#cab2d6', '#6a3d9a','#a6cee3', '#1f78b4', '#b2df8a',
+            '#ffff99', '#b15928',
+
+            '#fbb4ae', '#b3cde3', '#ccebc5',
+            '#decbe4', '#fed9a6', '#ffffcc', '#e5d8bd', '#fddaec',
+            '#1b9e77', '#d95f02', '#7570b3', '#e7298a',
+
+            '#66a61e', '#e6ab02', '#a6761d', '#666666',
+            '#e0f3db', '#a8ddb5', '#7bccc4', '#4eb3d3', '#2b8cbe',
+            '#0868ac', '#084081']
 
 
+common_discrete_color_num = len(ColorSet)
 
 
+def get_common_discrete_colors():
+    return ColorSet
+
+
+def is_support_cmap(cmap):
+    return cmap in ColorScheme.keys()
+
+def get_colors(cmap):
+    if(isinstance(cmap,str)):
+        colors_i = ColorScheme.get(cmap)
+        if(colors_i is None):
+            return []
+        else:
+            return colors_i
+    else:
+        colors_ = []
+        for each in cmap:
+            colors_i = ColorScheme.get(cmap)
+            if(colors_i is not None):
+                colors_.extend(colors_i)
+        return colors_
+
+
+def find_unsupport_cmaps(cmap):
+    unsupport_camps = []
+
+    if(isinstance(cmap,str)):
+        if(not is_support_cmap(cmap)):
+            unsupport_camps.append(cmap)
+    else:
+        for each in cmap:
+            if(not is_support_cmap(cmap)):
+                unsupport_camps.append(each)
+
+    return unsupport_camps 
 
 
 
