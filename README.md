@@ -68,15 +68,6 @@ FitModel.save_model(model, save_path)
 备注：功能一直处于更新中，模块可能需要用面向对象来重构，跟进第三方包
 
 ---
-### visualization
-
-可视化方面的轮子，目前功能较少。
-
-- 从pandas的Dataframe绘制热图
-
-备注：需要增加更多的功能
-
----
 ### colorfly
 
 关于颜色选择的模块，为离散和连续的数据选择合适的颜色，对于离散数据，更重要的，支持多种颜色的插值方式，例如线性的，log插值，让可视化结果更符合数据的分布。
@@ -118,6 +109,15 @@ ent.modified_entropy()  #计算修正熵值，归一到[0,1]
 
 ent.save_result(r"./some_dir_you_like",keep_infodata=1)
 ```
+
+---
+### visualization
+
+可视化方面的轮子，目前功能较少。
+
+- 从pandas的Dataframe绘制热图
+
+备注：需要增加更多的功能
 
 
 ## 更多的轮子
