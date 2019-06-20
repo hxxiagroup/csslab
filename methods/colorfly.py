@@ -129,27 +129,37 @@ def _plot_discrete_colorbar(color_dict):
     plt.show()
 def _plot_sequential_colorbar(vals, cmap):
     '''绘制colorbar'''
+
     num_val = len(vals)
     num_gradient = 50
     step = num_gradient / num_val
-
     gradient = np.linspace(1, 0, num_gradient)
     gradient = np.transpose([gradient, gradient])
 
-    fig = plt.figure()
+    fig = plt.figure(figsize= (1.5,8))
     ax = fig.add_subplot(1, 1, 1)
+    plt.subplots_adjust(left=0, bottom=0.0,
+                        right=1, top=1, hspace=0, wspace=0)
 
-    ytick = [i * step for i in range(0, num_val, 1)]
-    ylabel = [str(round(each, 2)) for each in vals[::-1]]
+    ylabel = np.linspace(vals[-1],vals[0],num_val)
+    ylabel = [str(round(each, 3)) for each in ylabel]
+    #------tmp
+    if(eval(ylabel[-1]) <0):
+        ylabel[-1] = 0
+    loc_y = 0.97
+    loc_x = 0.02
+    locs_y = np.linspace(loc_y,0.03,num_val)
+    for i,each in enumerate(locs_y):
+        tex = fig.text(loc_x,each,ylabel[i],fontsize=16)
 
-    ax.set_yticks(ytick)
-    ax.set_yticklabels(ylabel)
     ax.get_xaxis().set_visible(False)
-    ax.set_title(cmap)
+    ax.get_yaxis().set_visible(False)
+
     ax.imshow(gradient, cmap=cmap)
 
     plt.tight_layout()
     plt.show()
+
 
 # --------------------------------------------------------
 

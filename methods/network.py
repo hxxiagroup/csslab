@@ -46,8 +46,6 @@
 
 import pandas as pd
 import numpy as np
-import graphistry
-import igraph
 import networkx as nx
 
 
@@ -382,6 +380,8 @@ class NetworkUnity():
         :param nodes: DataFrame,如果需要按社区颜色绘制，请传入带有社区信息的节点表, ['Id','modulraity_class']
         :return: None
         '''
+        import graphistry
+
         graphistry.register(key='contact pygraphistry for api key')
 
         ploter = graphistry.bind(source='Source', destination='Target').graph(graph)
@@ -476,6 +476,8 @@ class NetworkUnity():
             1.edgedata 和 graph 至少要给定一个
             2.与gephi中计算的模块度结果已经对比过了，结果一致
         '''
+        import graphistry
+
         if edgedata is None and graph is not None:
             edgedata = NetworkUnity.networkx2pandas(graph)
 

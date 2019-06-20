@@ -46,10 +46,9 @@ def read_csv(readpath,**kwargs):
     data = pd.concat(chunks,ignore_index=True)
     return data
 
-def get_files(filedir, filetype='.csv', return_type='abspath'):
+def get_files(filedir, filetype=None, return_type='abspath'):
     '''
     返回当前目录下的所有该类型文件名或地址
-
     :param filedir: str,目录
     :param filetype: str,文件格式
     :param return_type: 只是文件名 或 绝对地址
@@ -57,7 +56,8 @@ def get_files(filedir, filetype='.csv', return_type='abspath'):
     '''
     files = []
     for filename in os.listdir(filedir):
-        if os.path.splitext(filename)[1] == filetype:
+        if (filetype is None or 
+                os.path.splitext(filename)[1] == filetype):
             files.append(os.path.splitext(filename)[0])
     if return_type == 'name':
         return files
@@ -66,7 +66,7 @@ def get_files(filedir, filetype='.csv', return_type='abspath'):
         return files
     return files
 
-def get_files_all(filedir,filetype='.csv'):
+def get_files_all(filedir,filetype=None):
     '''
     返回目录和子目录下所以该类型的文件列表
     :param filedir: str,目录
@@ -77,7 +77,8 @@ def get_files_all(filedir,filetype='.csv'):
     for each in os.walk(filedir):
         if len(each[-1]) >= 1:
             for file_i in each[-1]:
-                if os.path.splitext(file_i)[1] == filetype:
+                if(filetype is None 
+                        or os.path.splitext(file_i)[1] == filetype)
                     files.append(os.path.join(each[0], file_i))
     return files
 
@@ -89,25 +90,25 @@ def get_subdir(sup_dir):
             sub_dirs.append(abs_path)
     return sub_dirs
 
-def random_dataframe_sample(df, sample_num):
+def random_dataframe_sample(df, num):
     '''
     返回dataframe的随机数量的样本，不放回。
 
     如果出现KeyError的话，把下面的 df.ix 改成 df.loc 试试 !
 
     :param df: Dataframe,数据
-    :param sample_num: 样本数量，也可以是比例，例如 0.2
+    :param num: 样本数量，也可以是比例，例如 0.2
     :return: Dataframe
     '''
     length = len(df)
 
-    if sample_num < 1:
-        sample_num = int(length * sample_num)
+    if num < 1:
+        num = int(length * num)
 
     inds = list(df.index)
-    if sample_num <= length:
-        ind_sample = random.sample(inds, sample_num)
-        df_sample = df.ix[ind_sample, :]
+    if num <= length:
+        ind_sample = random.sample(inds, num)
+        df_sample = df.loc[ind_sample, :]
     else:
         df_sample = df
     return df_sample
@@ -176,27 +177,29 @@ def plot_distribution(data, subplot=2, data_norm=False, cmp=False, grid=True):
         data = distribution_pdf(data)
 
     fg = plt.figure()
-    ax1 = []
+    axes = []
     for i in range(subplot):
-        ax1.append(fg.add_subplot(1,subplot,i+1))
+        axes.append(fg.add_subplot(1,subplot,i+1))
 
-    data.plot(ax=ax1[0], style='*-')
-    ax1[0].set_title('Distribution')
+    data.plot(ax=axes[0], style='*-')
+    axes[0].set_title('Distribution')
 
     if subplot>=2:
-        data.plot(ax=ax1[1], style='*', logy=True, logx=True)
-        ax1[1].set_title('log-log')
-        #ax1[1].set_xlim([0, 50])
+        data.plot(ax=axes[1], style='*', logy=True, logx=True)
+        axes[1].set_title('log-log')
+        #axes[1].set_xlim([0, 50])
 
     if subplot>=3:
-        data.plot(ax=ax1[2], style='*-', logy=True)
-        ax1[2].set_title('semi-log')
+        data.plot(ax=axes[2], style='*-', logy=True)
+        axes[2].set_title('semi-log')
 
     for i in range(subplot):
-        ax1[i].set_ylabel(ylabel)
-        ax1[i].set_xlabel(data.name)
-        ax1[i].set_xlim([0, max(data.index)*1.1])
-        ax1[i].grid(grid, alpha=0.8)
+        axes[i].set_ylabel(ylabel)
+        axes[i].set_xlabel(data.name)
+        axes[i].set_xlim([0, max(data.index)*1.1])
+        axes[i].grid(grid, alpha=0.8)
+
+    return axes
 
 def normlize(data,lower=0,upper=1):
     '''
